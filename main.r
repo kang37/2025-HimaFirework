@@ -2,7 +2,8 @@
 library(quanteda)
 library(quanteda.textstats)
 library(quanteda.textplots)
-library(dplyr) 
+library(dplyr)
+library(tidyr)
 library(stringr)
 library(lubridate)
 library(purrr)
@@ -201,3 +202,55 @@ library(stm)
 my_lda_fit20 <- stm(dfmat_ch, K = 10, verbose = FALSE)
 plot(my_lda_fit20)  
 
+# Coding ----
+# 1. 定义中文关键词列表
+coding_keywords <- list(
+  # --- 1. 生态危害维度 (原有) ---
+  "eco_animal" = c("动物", "雪豹", "鼠兔", "牲畜", "栖息地", "物种", "生灵", "惊扰", "迁徙", "受惊"),
+  "eco_plant" = c("植被", "植物", "草", "地衣", "苔藓", "真菌", "草毡层", "修复", "绿化"),
+  "eco_ecosystem" = c("生态", "环境", "脆弱", "高原", "冰川", "山脉", "自然", "破坏", "不可逆", "创伤"), 
+  
+  # --- 2. 污染信息维度 (新增) ---
+  "pollution_light" = c("光污染", "夜空", "光害", "光亮"),
+  "pollution_noise" = c("噪声", "噪音", "声响", "爆破声", "惊扰", "安静"),
+  "pollution_waste" = c("垃圾", "残渣", "遗留物", "清理", "杂物", "废物"),
+  "pollution_air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
+  "pollution_water" = c("水污染", "水体", "融水", "雪水", "河流"),
+  
+  # --- 3. 品牌/商业维度 (新增) ---
+  "brand_image" = c("始祖鸟", "安踏", "品牌", "人设", "双标", "虚伪", "傲慢", "营销", "代言人"),
+  
+  # --- 4. 诉求/行动维度 (新增) ---
+  "call_accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案"),
+  "call_remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
+  "call_boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
+)
+
+# 定义一个辅助函数，用于检查文本是否包含任何关键词
+# 辅助函数（与你之前定义的函数相同）
+detect_keywords <- function(text, keywords) {
+  # 确保文本转换为小写以匹配，提高健壮性（如果数据未预先处理）
+  text <- tolower(text) 
+  pattern <- paste(keywords, collapse = "|")
+  # str_detect 返回 TRUE/FALSE，转换为整数 1/0
+  as.integer(str_detect(text, pattern))
+}
+
+
+# 批量计算所有新列的值
+# map_dfc (.dfc 返回一个数据框，列名沿用 list 的 names)
+coding_results_df <- map_dfc(coding_keywords, function(keywords) {
+  # 对数据框的 content 列应用 detect_keywords 函数
+  # 这里的 data 替换为你的数据框变量名
+  detect_keywords(data$content, keywords) 
+})
+
+# 将结果列绑定到原始数据
+data_coding <- data %>%
+  bind_cols(coding_results_df)
+
+# 检查结果
+# 你现在应该能看到 animal, plant, ecosystem, pollution_light, brand_image 等所有新增列
+data_coding %>% 
+  select(matches("^(eco|call|pollution)_|brand")) %>% 
+  colSums()
