@@ -313,3 +313,131 @@ lapply(
   names(coding_keywords), generate_wordcloud_cn
 )
 generate_wordcloud_cn(coding_col = "eco_animal", min_freq = 10)
+
+# Textplot ----
+
+#' 函数：生成 LSS 词语极性图表
+#'
+#' @param data 包含文本内容的数据框 (文本必须在 'content' 列)。
+#' @param pos_seeds 向量，代表正极的种子词 (e.g., 动物相关词)。
+#' @param neg_seeds 向量，代表负极的种子词 (e.g., 植物相关词)。
+#' @param pos_label 字符串，正极轴线标签 (e.g., "动物")。
+#' @param neg_label 字符串，负极轴线标签 (e.g., "植物")。
+#' @param n_top_features 整数，在图表中高亮显示的词语数量 (默认 50)。
+#' @return 返回 LSS 模型对象 (lss_model) 并绘制词语极性图。
+#'
+generate_lss_polarity_plot <- function(data, pos_seeds, neg_seeds, 
+                                       pos_label, neg_label, 
+                                       n_top_features = 50) {
+  
+  # ----------------------------------------------------------------------------
+  # 2. 定义分词和预处理参数 (硬编码特定于此事件的参数)
+  # ----------------------------------------------------------------------------
+  
+  # 2.1. 停用词和通用过滤词
+  ch_stop <- stopwords("zh", source = "misc")
+  custom_event_stopwords <- c(
+    "始祖鸟", "蔡国强", "喜马拉雅", "烟花秀", "升龙", "活动", 
+    "这个", "真是", "就是", "不要", "大师", "没有", "什么", "知道", 
+    "这种", "可以", "怎么", "已经", "感觉", "评论", "转发", "点赞",
+    "微博", "一个", "我们", "大家", "这种", "行为"
+  )
+  
+  # 2.2. 复合词/多词短语
+  multi_word_phrases <- list(
+    c("始祖", "鸟"), c("蔡", "国", "强"), c("硬", "气"), c("升", "龙"),
+    c("炸", "山"), c("锐", "评"), c("杂", "物"), c("圣", "山"), c("品牌", "形象")
+  )
+  
+  # ----------------------------------------------------------------------------
+  # 3. 数据准备和 DFM 构建
+  # ----------------------------------------------------------------------------
+  
+  weibo_corpus <- corpus(data, text_field = "content")
+  
+  # 3.1. 分词、清洗和复合
+  toks_lss <- weibo_corpus %>%
+    tokens(remove_punct = TRUE, remove_numbers = TRUE, remove_symbols = TRUE, split_tags = TRUE) %>%
+    tokens_remove(pattern = c(ch_stop, custom_event_stopwords)) %>%
+    tokens_select(min_nchar = 2) %>%
+    tokens_compound(pattern = multi_word_phrases, concatenator = "")
+  
+  # 3.2. 构建 DFM
+  df_matrix <- dfm(toks_lss) %>%
+    # 保留文档频率至少为 2 的词语
+    dfm_trim(min_docfreq = 2) 
+  
+  # ----------------------------------------------------------------------------
+  # 4. LSS 模型输入准备
+  # ----------------------------------------------------------------------------
+  
+  # 4.1. 定义种子词向量
+  seed_word <- c(
+    rep(1, length(pos_seeds)), 
+    rep(-1, length(neg_seeds))
+  ) %>%
+    setNames(c(pos_seeds, neg_seeds))
+  
+  # 4.2. 定义上下文词汇 (使用 DFM 中出现频率最高的前 5000 个词)
+  lss_terms <- names(topfeatures(df_matrix, n = 5000)) 
+  
+  # ----------------------------------------------------------------------------
+  # 5. 运行 LSS 模型
+  # ----------------------------------------------------------------------------
+  
+  lss_model <- textmodel_lss(
+    df_matrix, 
+    seeds = seed_word, 
+    terms = lss_terms, 
+    k = 300, # 潜在语义空间维度
+    include_data = FALSE 
+  )
+  
+  # ----------------------------------------------------------------------------
+  # 6. 可视化和返回
+  # ----------------------------------------------------------------------------
+  
+  # 筛选出用于高亮显示的词汇
+  top_features_to_highlight <- names(topfeatures(df_matrix, n_top_features))
+  
+  # 绘制 LSS 词语极性图
+  textplot_terms(
+    lss_model, 
+    highlighted = top_features_to_highlight, 
+    title = paste0("词语极性分析：", pos_label, " vs. ", neg_label),
+    subtitle = paste0("轴线极性：「", pos_label, " (+1)」到「", neg_label, " (-1)」的 LSS 轴线")
+  )
+  
+  # 返回模型对象，以便后续检查词语得分
+  return(lss_model)
+}
+
+# 2. 调用函数
+# 假设您的数据框已加载为 data_coding
+map2(
+  list(
+    coding_keywords$eco_animal, 
+    coding_keywords$call_remedy, 
+    c("动物", "鼠兔")
+  ), 
+  list(
+    coding_keywords$eco_animal, 
+    coding_keywords$call_boycott, 
+    c("植物", "真菌")
+  ), 
+  function(x, y) {
+    generate_lss_polarity_plot(
+      data = data_coding, 
+      pos_seeds = x, 
+      neg_seeds = y, 
+      pos_label = "", 
+      neg_label = "",
+      n_top_features = 50 # 高亮显示前 60 个词语
+    ) %>% 
+      textplot_terms(
+        ., 
+        highlighted = c(x, y), 
+        title = "词语极性：动物相关 vs. 植物相关"
+      )
+  }
+)
