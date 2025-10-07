@@ -4,6 +4,7 @@ library(quanteda.textstats)
 library(quanteda.textplots)
 library(dplyr)
 library(tidyr)
+library(jiebaR)
 library(stringr)
 library(lubridate)
 library(purrr)
@@ -211,7 +212,7 @@ coding_keywords <- list(
   "eco_ecosystem" = c("生态", "环境", "脆弱", "高原", "冰川", "山脉", "自然", "破坏", "不可逆", "创伤"), 
   
   # --- 2. 污染信息维度 (新增) ---
-  "pollution_light" = c("光污染", "夜空", "光害", "光亮"),
+  "pollution_light" = c("光污染", "光害", "光亮"),
   "pollution_noise" = c("噪声", "噪音", "声响", "爆破声", "惊扰", "安静"),
   "pollution_waste" = c("垃圾", "残渣", "遗留物", "清理", "杂物", "废物"),
   "pollution_air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
@@ -254,3 +255,61 @@ data_coding <- data %>%
 data_coding %>% 
   select(matches("^(eco|call|pollution)_|brand")) %>% 
   colSums()
+
+# Word cloud by topic ----
+
+# 3. 核心函数：词云生成器
+#' 生成中文评论词云的函数
+#'
+#' @param subset_data 经过筛选后的数据框子集，必须包含 'content' 列。
+#' @param plot_title 词云图的标题。
+#' @param min_freq 词语在 DFM 中的最低出现频率 (用于过滤噪声)。
+#' @param max_words 词云中显示的最大词语数量。
+#'
+generate_wordcloud_cn <- function(coding_col, min_freq = 5, max_words = 100) {
+  subset_data <- data_coding %>% filter(get(coding_col) == 1)
+  # 1. 创建 quanteda 语料库
+  weibo_corpus <- corpus(subset_data, text_field = "content")
+  
+  # 2. 分词、清洗和复合
+  toks_cleaned <- weibo_corpus %>%
+    # 分词时移除标点符号、数字和符号，并拆分标签（split_tags = TRUE）
+    tokens(remove_punct = TRUE, remove_numbers = TRUE, remove_symbols = TRUE, split_tags = TRUE) %>%
+    # 移除官方和自定义的停用词
+    tokens_remove(pattern = c(ch_stop, c(
+      "始祖鸟", "蔡国强", "喜马拉雅", "烟花秀", "升龙", "活动", 
+      "这个", "真是", "就是", "不要", "大师", "没有", "什么", "知道", 
+      "这种", "可以", "怎么", "已经", "感觉", "评论", "转发", "点赞",
+      "微博", "一个", "我们", "大家", "这种", "行为", "烟花"
+    ))) %>%
+    # 移除长度小于 2 的词
+    tokens_select(min_nchar = 2) %>%
+    # 组合多词短语
+    tokens_compound(pattern = multi_word_phrases, concatenator = "")
+  
+  # 3. 构建 DFM
+  dfmat_ch <- dfm(toks_cleaned)
+  
+  # 调整字体以适应 macOS 环境（您的代码中已有此判断）
+  cloud_font <- if (Sys.info()['sysname'] == "Darwin") "SimHei" else NULL
+  
+  textplot_wordcloud(
+    dfmat_ch, 
+    min_count = min_freq, 
+    max_words = max_words,
+    random_order = FALSE,
+    rotation = .25, 
+    min_size = 1, 
+    max_size = 5,
+    font = cloud_font,
+    color = RColorBrewer::brewer.pal(8, "Dark2")
+  )
+  title(main = coding_col, cex.main = 1.2)
+  
+  return(dfmat_ch)
+}
+
+lapply(
+  names(coding_keywords), generate_wordcloud_cn
+)
+generate_wordcloud_cn(coding_col = "eco_animal", min_freq = 10)
