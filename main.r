@@ -2,6 +2,7 @@
 library(quanteda)
 library(quanteda.textstats)
 library(quanteda.textplots)
+library(quanteda.textmodels) # 用于 textmodel_lss
 library(dplyr)
 library(tidyr)
 library(jiebaR)
@@ -10,6 +11,9 @@ library(lubridate)
 library(purrr)
 library(showtext)
 library(plotly)
+library(rlang)
+library(LSX)
+
 showtext_auto()
 
 # Basic data ----
@@ -96,8 +100,12 @@ data %>%
 weibo_corpus <- corpus(data, text_field = "content", 
                        docid_field = "doc_id") 
 
-# Chinese stopwords
-ch_stop <- stopwords("zh", source = "misc")
+# 中文停止词。
+ch_stop <- c(
+  stopwords("zh", source = "misc"), 
+  # 根据分析结果增加停止词。
+  "更", "一个"
+)
 
 # tokenize
 toks_ch_with_tag <- weibo_corpus %>% 
@@ -152,7 +160,11 @@ ggplotly(
 )
 
 # 组合词。
-multi_word_phrases <- list(c("始祖", "鸟"), c("蔡", "国", "强"), c("硬", "气"), c("升", "龙" ), c("炸", "山"), c("锐", "评"), c("杂", "物"), c("圣", "山"))
+multi_word_phrases <- list(
+  c("始祖", "鸟"), c("蔡", "国", "强"), c("硬", "气"), c("升", "龙" ), 
+  c("炸", "山"), c("锐", "评"), c("杂", "物"), c("圣", "山"), 
+  c("微", "博"), c("中", "日")
+)
 
 toks_ch_split_tag <- weibo_corpus %>% 
   tokens(remove_punct = TRUE, split_tags = TRUE) %>% 
@@ -341,12 +353,6 @@ generate_lss_polarity_plot <- function(data, pos_seeds, neg_seeds,
     "这个", "真是", "就是", "不要", "大师", "没有", "什么", "知道", 
     "这种", "可以", "怎么", "已经", "感觉", "评论", "转发", "点赞",
     "微博", "一个", "我们", "大家", "这种", "行为"
-  )
-  
-  # 2.2. 复合词/多词短语
-  multi_word_phrases <- list(
-    c("始祖", "鸟"), c("蔡", "国", "强"), c("硬", "气"), c("升", "龙"),
-    c("炸", "山"), c("锐", "评"), c("杂", "物"), c("圣", "山"), c("品牌", "形象")
   )
   
   # ----------------------------------------------------------------------------
