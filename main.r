@@ -7,8 +7,10 @@ library(dplyr)
 library(tidyr)
 library(jiebaR)
 library(stringr)
+library(openxlsx)
 library(lubridate)
 library(purrr)
+library(tibble)
 library(showtext)
 library(plotly)
 library(rlang)
@@ -19,8 +21,9 @@ showtext_auto()
 # Basic data ----
 # 函数：推算日期。从一个data.frame的一列中提取日期。这列中有两种类型数据，一类类似于“2025/09/28 11:35:15”，另一类类似于“1小时前 转赞人数超过100”。对于前者，直接提取日期并转化成日期类型，对于后者，我的数据下载时间是2025-09-29 10:55:00，根据这个推算。
 # 定义推算相对日期的函数
-calc_relative_date <- function(
-    time_str, download_time = ymd_hm("2025-09-28 21:34", tz = "Asia/Shanghai")) {
+calc_relative_date <- function(time_str, download_time) {
+  # 提取下载时间。
+  download_time <- ymd_hms(download_time, tz = "Asia/Tokyo")
   
   # --- 新增逻辑 1: 处理 "昨天" ---
   if (str_detect(time_str, "^昨天")) {
@@ -30,7 +33,6 @@ calc_relative_date <- function(
   }
   
   # --- 现有逻辑: 处理 "X小时/天/分钟前" ---
-  
   # 提取数字（时间量）
   value <- as.numeric(str_extract(time_str, "\\d+"))
   
@@ -41,51 +43,49 @@ calc_relative_date <- function(
     str_detect(time_str, "分钟前") ~ "minutes",
     TRUE ~ "unknown"
   )
-  
   if (unit == "unknown" | is.na(value)) {
     return(as.Date(NA)) # 无法解析则返回 NA
   }
   
   # 使用 lubridate::duration() 进行推算
   result_datetime <- download_time - duration(value, units = unit)
+  result_datetime <- with_tz(result_datetime, tzone = "Asia/Shanghai")
   
   return(as_date(result_datetime))
 }
 
-# 定义下载时间（包含在函数默认值中，但此处也单独定义，便于逻辑判断）
-DOWNLOAD_DATE <- as_date(ymd_hm("2025-09-29 10:55", tz = "Asia/Shanghai"))
 
-data <- openxlsx::read.xlsx("data_raw/weibo_himalaya_firework.xlsx") %>%
+data <- lapply(
+  paste0("data_raw/weibo_himalaya_firework_", 1:3, ".xlsx"), read.xlsx
+) %>% 
+  bind_rows() %>% 
   tibble() %>%
   rename_with(~tolower(.x)) %>%
   mutate(
-    # Bug: 需要确认时区。
-    download_time = ymd_hms(current_time, ymd_hms(tz = "Asia/Shanghai")), 
     post_date = case_when(
       # 条件 A: 标准日期时间格式 (包含4位年份)
       str_detect(post_time, "(\\d{4}[-/]\\d{2}[-/]\\d{2})") ~
-        as_date(ymd_hms(post_time, truncated = 1)),
+        with_tz(ymd_hms(post_time), tzone = "Asia/Shanghai") %>% 
+        as_date(),
       
       # 条件 B: 月-日格式 (如 "9-26")
       # 匹配开头是数字-数字，且不含年份的格式
-      str_detect(post_time, "^\\d{1,2}-\\d{1,2}") ~ {
-        # 提取当前下载年份
-        current_year <- year(download_time)
-        # 将 "9-26" 和 "2025-" 拼接成 "2025-9-26"
-        date_str <- paste0(
-          current_year, "-", str_extract(post_time, "^\\d{1,2}-\\d{1,2}")
-        )
-        # 使用 lubridate::ymd() 转换
-        ymd(date_str)
-      },
+      str_detect(post_time, "^\\d{1,2}-\\d{1,2}") ~ 
+        # 拼接日期。
+        paste0("2025-", str_extract(post_time, "^\\d{1,2}-\\d{1,2}")) %>% 
+        ymd(),
       
       # 条件 C: 相对时间格式 ("小时前", "昨天", "天前")
-      TRUE ~ map_vec(post_time, ~calc_relative_date(.x))
+      TRUE ~ map2_vec(post_time, current_time, ~calc_relative_date(.x, .y))
     ),
     .after = "post_time"
   ) %>% 
-  filter(post_date >= as_date("2025-09-19")) %>% 
-  select(-current_time, -download_time) %>% 
+  filter(
+    post_date >= as_date("2025-09-19") & post_date <= as_date("2025-10-04")
+  ) %>% 
+  select(
+    username, post_date, content, forward_count, review_count, like_count
+  ) %>% 
   distinct()
 
 # 数据量
@@ -194,7 +194,7 @@ library(quanteda.textplots)
 textplot_wordcloud(
   dfmat_ch, min_count = 50, random_order = FALSE,
   rotation = .25, max_words = 100,
-  min_size = 0.5, max_size = 2.8,
+  min_size = 1, max_size = 5,
   font = if (Sys.info()['sysname'] == "Darwin") "SimHei" else NULL,
   color = RColorBrewer::brewer.pal(8, "Dark2")
 )
@@ -211,9 +211,9 @@ knitr::kable(head(tstat_col_ch, 10))
 # Topic ----
 # 主题模型
 # 大约花1-2分钟
-library(stm)
-my_lda_fit20 <- stm(dfmat_ch, K = 10, verbose = FALSE)
-plot(my_lda_fit20)  
+# library(stm)
+# my_lda_fit20 <- stm(dfmat_ch, K = 10, verbose = FALSE)
+# plot(my_lda_fit20)  
 
 # Coding ----
 # 1. 定义中文关键词列表
@@ -224,7 +224,7 @@ coding_keywords <- list(
   "eco_ecosystem" = c("生态", "环境", "脆弱", "高原", "冰川", "山脉", "自然", "破坏", "不可逆", "创伤"), 
   
   # --- 2. 污染信息维度 (新增) ---
-  "pollution_light" = c("光污染", "光害", "光亮"),
+  "pollution_light" = c("光污染", "强光", "光害"),
   "pollution_noise" = c("噪声", "噪音", "声响", "爆破声", "惊扰", "安静"),
   "pollution_waste" = c("垃圾", "残渣", "遗留物", "清理", "杂物", "废物"),
   "pollution_air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
@@ -269,7 +269,6 @@ data_coding %>%
   colSums()
 
 # Word cloud by topic ----
-
 # 3. 核心函数：词云生成器
 #' 生成中文评论词云的函数
 #'
@@ -324,10 +323,8 @@ generate_wordcloud_cn <- function(coding_col, min_freq = 5, max_words = 100) {
 lapply(
   names(coding_keywords), generate_wordcloud_cn
 )
-generate_wordcloud_cn(coding_col = "eco_animal", min_freq = 10)
 
 # Textplot ----
-
 #' 函数：生成 LSS 词语极性图表
 #'
 #' @param data 包含文本内容的数据框 (文本必须在 'content' 列)。
