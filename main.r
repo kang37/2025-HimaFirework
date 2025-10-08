@@ -2,7 +2,7 @@
 library(quanteda)
 library(quanteda.textstats)
 library(quanteda.textplots)
-library(quanteda.textmodels) # 用于 textmodel_lss
+library(quanteda.textmodels) 
 library(dplyr)
 library(tidyr)
 library(jiebaR)
@@ -97,8 +97,9 @@ data %>%
   geom_col(aes(post_date, n))
 
 # 将你的评论文本列 (comment_text) 转换为 quanteda 语料库
-weibo_corpus <- corpus(data, text_field = "content", 
-                       docid_field = "doc_id") 
+weibo_corpus <- corpus(
+  data, text_field = "content", docid_field = "doc_id"
+) 
 
 # 中文停止词。
 ch_stop <- c(
@@ -107,28 +108,21 @@ ch_stop <- c(
   "更", "一个"
 )
 
-# tokenize
-toks_ch_with_tag <- weibo_corpus %>% 
-  tokens(remove_punct = TRUE) %>% 
-  tokens_remove(pattern = ch_stop)
-
-# 提取标签。
-dfmat_tag <- dfm(toks_ch_with_tag) %>% 
-  dfm_select(., pattern = "#*")
-names(topfeatures(dfmat_tag, 20))
-
 # Tag temporal change ----
 # 标签热度随着时间变化。
-# 1.1 找出总频率最高的前 20 个标签
-top_20_tags <- topfeatures(dfmat_tag, 15) %>%
-  names() # 提取词语名称（作为字符向量）
-
-# 1.2 筛选 DFM，只保留这 20 个标签
-dfmat_top_tags <- dfm_select(dfmat_tag, pattern = top_20_tags)
-
+# 找出总频率最高的前 20 个标签
+dfmat_tag <- weibo_corpus %>% 
+  tokens(remove_punct = TRUE) %>% 
+  tokens_remove(pattern = ch_stop) %>% 
+  # 提取标签。
+  dfm(.) %>% 
+  dfm_select(., pattern = "#*")
+# 各日期各标签的频度。
 df_date_freq <- 
+  # 筛选 DFM，只保留这 20 个标签
+  dfm_select(dfmat_tag, pattern = top_tag) %>% 
   # 2.1 按 'post_date' 变量对 DFM 进行汇总 (即按日期求和)
-  dfm_group(dfmat_top_tags, groups = post_date) %>%
+  dfm_group(., groups = post_date) %>%
   convert(to = "data.frame") %>%
   # 重命名日期列 (dfm_group 会将日期移到 docname 列)
   rename(date = doc_id) %>%
@@ -139,25 +133,26 @@ df_date_freq <-
     values_to = "Frequency"
   ) %>%
   # 确保 Date 是日期类型
-  mutate(date = as_date(date)) 
+  mutate(date = as_date(date)) %>% 
+  arrange(-Frequency)
 
-# 3.2 绘制高频标签随时间变化的图表
-ggplotly(
-  df_date_freq %>%
-    # 仅保留出现次数大于 0 的数据点
-    filter(Frequency > 0) %>%
-    ggplot(aes(x = date, y = Frequency, fill = Tag)) +
-    geom_col(position = "fill") +
-    labs(
-      title = "高频标签在各个日期的出现频率",
-      x = "日期",
-      y = "出现频率 (计数)",
-      color = "高频标签"
-    ) +
-    theme_minimal() +
-    scale_x_date(date_breaks = "1 day", date_labels = "%m-%d") + # 优化日期轴显示
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) # 旋转 x 轴标签
-)
+# 绘制高频标签随时间变化的图表
+# ggplotly(
+#   df_date_freq %>%
+#     # 仅保留出现次数大于 0 的数据点
+#     filter(Frequency > 0) %>%
+#     ggplot(aes(x = date, y = Frequency, fill = Tag)) +
+#     geom_col(position = "fill") +
+#     labs(
+#       title = "高频标签在各个日期的出现频率",
+#       x = "日期",
+#       y = "出现频率 (计数)",
+#       color = "高频标签"
+#     ) +
+#     theme_minimal() +
+#     scale_x_date(date_breaks = "1 day", date_labels = "%m-%d") + # 优化日期轴显示
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) # 旋转 x 轴标签
+# )
 
 # 组合词。
 multi_word_phrases <- list(
@@ -188,9 +183,6 @@ topfeatures(dfmat_ch, 30) %>%
 # 词云
 # Plot a word cloud
 set.seed(100)
-
-# to set the font correctly for macOS
-library(quanteda.textplots)
 textplot_wordcloud(
   dfmat_ch, min_count = 50, random_order = FALSE,
   rotation = .25, max_words = 100,
@@ -201,8 +193,6 @@ textplot_wordcloud(
 
 # Collocations ----
 # bigrams cross the whole dataset
-library("quanteda.textstats")
-
 tstat_col_ch <- textstat_collocations(toks_ch_split_tag, size = 2, min_count = 20)
 knitr::kable(head(tstat_col_ch, 10))
 tstat_col_ch <- textstat_collocations(toks_ch_split_tag, size = 3, min_count = 20)
