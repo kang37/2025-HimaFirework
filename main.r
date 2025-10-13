@@ -137,6 +137,7 @@ all_dt_num_smry <-
     by = c("post_date" = "date")
   )
 
+# 各数据趋势。
 (
   ggplot(all_dt_num_smry, aes(post_date)) +
     geom_line(aes(y = weibo_num), color = "darkorange") +
@@ -185,6 +186,48 @@ all_dt_num_smry <-
     labs(x = "Date", y = "Adjusted stock\nprice (HKD)") +
     theme_bw()
 )
+
+# 相关性。
+# 函数：输入数据框，获得每两列之间的相关系数。
+get_cor <- function(df_x) {
+  # 去掉日期列，只保留数值列
+  num_df <- df_x %>%
+    select(-post_date)
+  
+  # 计算相关系数和p值。
+  rc <- rcorr(as.matrix(num_df))
+  cor_mat <- rc$r
+  p_mat   <- rc$P
+  
+  # 把矩阵转成长表
+  cor_long <- melt(cor_mat, na.rm = TRUE)
+  p_long   <- melt(p_mat, na.rm = TRUE)
+  merged   <- left_join(cor_long, p_long, by = c("Var1", "Var2"))
+  names(merged) <- c("Var1", "Var2", "cor", "p")
+  
+  # 显著性标记。
+  merged <- merged %>%
+    mutate(
+      sig = case_when(
+        p < 0.001 ~ "***",
+        p < 0.01  ~ "**",
+        p < 0.05  ~ "*",
+        TRUE      ~ ""
+      )
+    )
+  
+  # 绘图。
+  ggplot(merged, aes(Var1, Var2, fill = cor)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = paste0(round(cor, 2), sig)), size = 3) +
+    scale_fill_gradient2(
+      low = "#6baed6", mid = "white", high = "red", midpoint = 0, limits = c(-1,1)
+    ) +
+    theme_minimal() +
+    labs(fill = "r") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+get_cor(all_dt_num_smry)
 
 # 将你的评论文本列 (comment_text) 转换为 quanteda 语料库
 weibo_corpus <- corpus(
