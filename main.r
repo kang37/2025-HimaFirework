@@ -5,16 +5,21 @@ library(quanteda.textplots)
 library(quanteda.textmodels) 
 library(dplyr)
 library(tidyr)
-library(jiebaR)
+# library(jiebaR)
 library(stringr)
 library(openxlsx)
 library(lubridate)
+library(readr)
 library(purrr)
 library(tibble)
 library(showtext)
 library(plotly)
 library(rlang)
 library(LSX)
+library(patchwork)
+library(quantmod)
+library(Hmisc)
+library(reshape2)
 
 showtext_auto()
 
@@ -90,11 +95,96 @@ data <- lapply(
 
 # 数据量
 # Bug: 是否可靠？不清楚Octoparse的抓取方式。
-data %>% 
+
+# 安踏股价。
+anta_stock <- tq_get("2020.HK", from = "2025-09-20", to = "2025-10-04")
+
+# 谷歌趋势：“蔡国强”、“始祖鸟”、“安踏”的谷歌趋势。
+goo_trend <- lapply(
+  c("caiguoqiang_cn", "arctery_cn", "anta_cn"), 
+  function(x) {
+    read.csv(paste0("data_raw/", x, ".csv")) %>% 
+      slice(-1) %>% 
+      rownames_to_column(var = "date") %>% 
+      rename_with(~ c("date", x))
+  }
+) %>% 
+  reduce(left_join, by = "date") %>% 
+  mutate(date = as_date(date)) %>% 
+  mutate(across(-date, ~ as.numeric(gsub("[^0-9.]", "", .x))))
+
+# 舆论变量数量汇总：微博文本数，安踏股价，谷歌趋势。
+# Bug: 百度指数暂时无法获得。
+all_dt_num_smry <- 
+  # 微博文本数。
+  data %>% 
+  # Bug: 将点赞数据转化成数字。
+  mutate(
+    like_count = case_when(
+      str_detect(like_count, "赞") ~ 0,  # 含“赞”时设为0
+      TRUE ~ str_replace_all(like_count, "万", "e4") %>% parse_number()
+    )
+  ) %>% 
   group_by(post_date) %>% 
-  summarise(n = n()) %>% 
-  ggplot() + 
-  geom_col(aes(post_date, n))
+  summarise(
+    weibo_num = n(), weibo_num_like = sum(like_count), .groups = "drop"
+  ) %>% 
+  # 谷歌指数。
+  left_join(goo_trend, by = c("post_date" = "date")) %>% 
+  # 安踏股价。
+  left_join(
+    anta_stock %>% select(date, adj_stock = adjusted), 
+    by = c("post_date" = "date")
+  )
+
+(
+  ggplot(all_dt_num_smry, aes(post_date)) +
+    geom_line(aes(y = weibo_num), color = "darkorange") +
+    labs(x = "Date", y = "Weibo posts") +
+    theme_bw()
+) / (
+  ggplot(all_dt_num_smry, aes(post_date)) +
+    geom_line(aes(y = weibo_num_like), color = "darkred") + 
+    labs(x = "Date", y = "Weibo likes") +
+    theme_bw()
+) / (
+  all_dt_num_smry %>%
+    select(post_date, caiguoqiang_cn, arctery_cn, anta_cn) %>%
+    pivot_longer(
+      -post_date, names_to  = "keyword", values_to = "value"
+    ) %>%
+    mutate(
+      keyword = recode(
+        keyword, 
+        caiguoqiang_cn = "Cai Guoqiang", arctery_cn = "Arc'teryx", anta_cn = "Anta"
+      ),
+      keyword = factor(keyword, levels = c("Cai Guoqiang", "Arc'teryx", "Anta"))
+    ) %>% 
+    ggplot(aes(post_date, value, color = keyword, linetype = keyword)) + 
+    geom_line(linewidth = 0.8) +
+    scale_color_manual(values = c(
+      "Cai Guoqiang" = "#1f77b4", "Arc'teryx" = "#2ca02c", "Anta" = "#17becf"
+    )) +
+    scale_linetype_manual(values = c(
+      "Cai Guoqiang" = "solid", "Arc'teryx" = "dashed", "Anta" = "dotted"
+    )) +
+    labs(x = "Date", y = "Google trend\nindex", color = NULL, linetype = NULL) +
+    theme_bw() +
+    theme(
+      legend.position = c(0.95, 0.95),
+      legend.justification = c(1, 1),
+      legend.text = element_text(size = 8),
+      legend.key.height = unit(0.05, "lines"),
+      legend.spacing.y = unit(0.05, "lines"),
+      legend.background = element_rect(fill = "white", color = "grey")
+    )
+) / (
+  ggplot(all_dt_num_smry, aes(post_date, adj_stock)) +
+    geom_line(color = "grey") +
+    geom_point(color = "grey2", size = 1) +
+    labs(x = "Date", y = "Adjusted stock\nprice (HKD)") +
+    theme_bw()
+)
 
 # 将你的评论文本列 (comment_text) 转换为 quanteda 语料库
 weibo_corpus <- corpus(
@@ -221,10 +311,10 @@ coding_keywords <- list(
   "pollution_water" = c("水污染", "水体", "融水", "雪水", "河流"),
   
   # --- 3. 品牌/商业维度 (新增) ---
-  "brand_image" = c("始祖鸟", "安踏", "品牌", "人设", "双标", "虚伪", "傲慢", "营销", "代言人"),
+  "brand_image" = c("始祖鸟", "安踏", "品牌", "人设", "双标", "虚伪", "傲慢", "营销", "代言人", "广告"),
   
   # --- 4. 诉求/行动维度 (新增) ---
-  "call_accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案"),
+  "call_accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案", "判刑"),
   "call_remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
   "call_boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
 )
@@ -313,6 +403,35 @@ generate_wordcloud_cn <- function(coding_col, min_freq = 5, max_words = 100) {
 lapply(
   names(coding_keywords), generate_wordcloud_cn
 )
+
+# 提及各项比例的时间变化。
+# Bug: 只选取大于50条文本的日期分析。
+get_coding_day_prop <- function(coding_col_name) {
+  data_coding %>% 
+    filter(
+      post_date >= as_date("2025-09-24") & post_date <= as_date("2025-09-30")
+    ) %>% 
+    group_by(post_date) %>% 
+    summarise(
+      coding_n = sum(get(coding_col_name) == 1), 
+      day_n = n(), 
+      prop = coding_n / day_n, 
+      .groups = "drop"
+    ) %>% 
+    mutate(coding_col = coding_col_name, .before = 1)
+}
+coding_smry <- lapply(
+  names(coding_keywords), 
+  get_coding_day_prop
+) %>% 
+  bind_rows() %>% 
+  mutate(cat = str_extract(coding_col, "^[^_]+"))
+ggplotly(
+  ggplot(coding_smry) + 
+    geom_line(aes(post_date, prop, group = coding_col, col = coding_col)) + 
+    facet_wrap(.~ cat)
+)
+# Bug: 27日之后有什么新的主题出现吗？
 
 # Textplot ----
 #' 函数：生成 LSS 词语极性图表
