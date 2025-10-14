@@ -353,13 +353,14 @@ coding_keywords <- list(
   "pollution_air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
   "pollution_water" = c("水污染", "水体", "融水", "雪水", "河流"),
   
-  # --- 3. 品牌/商业维度 (新增) ---
-  "brand_image" = c("始祖鸟", "安踏", "品牌", "人设", "双标", "虚伪", "傲慢", "营销", "代言人", "广告"),
+  # --- 3. 品牌/商业维度 ---
+  "brand_company" = c("始祖鸟", "安踏", "品牌", "广告"),
+  "brand_cai" = c("人设", "虚伪", "傲慢"),
   
   # --- 4. 诉求/行动维度 (新增) ---
-  "call_accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案", "判刑"),
-  "call_remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
-  "call_boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
+  "act_accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案", "判刑"),
+  "act_remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
+  "act_boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
 )
 
 # 定义一个辅助函数，用于检查文本是否包含任何关键词
@@ -471,7 +472,10 @@ coding_smry <- lapply(
   mutate(cat = str_extract(coding_col, "^[^_]+"))
 ggplotly(
   ggplot(coding_smry) + 
-    geom_line(aes(post_date, prop, group = coding_col, col = coding_col)) + 
+    geom_area(
+      aes(post_date, prop, fill = coding_col), position = "dodge", 
+      alpha = 0.5
+    ) + 
     facet_wrap(.~ cat)
 )
 # Bug: 27日之后有什么新的主题出现吗？
