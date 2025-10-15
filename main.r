@@ -195,7 +195,7 @@ get_cor <- function(df_x) {
     select(-post_date)
   
   # 计算相关系数和p值。
-  rc <- rcorr(as.matrix(num_df))
+  rc <- rcorr(as.matrix(num_df), , type="spearman")
   cor_mat <- rc$r
   p_mat   <- rc$P
   
@@ -212,6 +212,7 @@ get_cor <- function(df_x) {
         p < 0.001 ~ "***",
         p < 0.01  ~ "**",
         p < 0.05  ~ "*",
+        p < 0.1 ~ ".", 
         TRUE      ~ ""
       )
     )
