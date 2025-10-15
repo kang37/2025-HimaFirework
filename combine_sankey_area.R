@@ -188,3 +188,20 @@ area_plots_wrapped <- wrap_plots(plots, ncol = 1)
 
 # 组合图表
 sankey_plot | area_plots_wrapped
+
+# 条形图加面积图版本。
+(
+  coding_smry %>% 
+    group_by(cat) %>% 
+    summarise(n = n(), .groups = "drop") %>% 
+    mutate(cat = factor(cat, levels = c("pollution", "eco", "brand", "act"))) %>% 
+    ggplot() + 
+    geom_col(aes(cat, n, fill = cat)) + 
+    scale_fill_manual(
+      breaks = c("pollution", "eco", "brand", "act"), 
+      values = c("#d73027", "#1b9e77", "#756bb1", "#08519c")
+    ) + 
+    theme_bw() + 
+    labs(x = NULL, y = "Number of posts") + 
+    theme(legend.position = "none")
+) | wrap_plots(plots, ncol = 2)
