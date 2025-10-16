@@ -324,6 +324,28 @@ textplot_wordcloud(
   font = if (Sys.info()['sysname'] == "Darwin") "SimHei" else NULL,
   color = RColorBrewer::brewer.pal(8, "Dark2")
 )
+# 英文词云：需要手动翻译。
+# 输出高频词并手动翻译：
+write.xlsx(
+  data.frame(topfeatures(dfmat_ch, 200)) %>% rownames_to_column(var = "term"), 
+  "data_proc/high_freq_term.xlsx"
+)
+# 输出英文词云。
+library(wordcloud)
+df_freq <- read.xlsx("data_proc/high_freq_term.xlsx")
+png("test.png", width = 2000, height = 2000, res = 300)
+set.seed(123)
+wordcloud(
+  words = df_freq$term_en,
+  freq = df_freq$freq,
+  min.freq = 2,
+  max.words = 200,
+  random.order = FALSE,
+  rot.per = 0.3,
+  scale = c(3, 0.5),              # 放大整体文字比例
+  colors = brewer.pal(8, "Dark2") # 更清新的配色
+)
+dev.off()
 
 # Collocations ----
 # bigrams cross the whole dataset
