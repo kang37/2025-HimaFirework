@@ -20,6 +20,7 @@ library(patchwork)
 library(quantmod)
 library(Hmisc)
 library(reshape2)
+library(TTR)
 
 showtext_auto()
 
@@ -72,7 +73,6 @@ data <- lapply(
       str_detect(post_time, "(\\d{4}[-/]\\d{2}[-/]\\d{2})") ~
         with_tz(ymd_hms(post_time), tzone = "Asia/Shanghai") %>% 
         as_date(),
-      
       # 条件 B: 月-日格式 (如 "9-26")
       # 匹配开头是数字-数字，且不含年份的格式
       str_detect(post_time, "^\\d{1,2}-\\d{1,2}") ~ 
@@ -89,7 +89,8 @@ data <- lapply(
     post_date >= as_date("2025-09-19") & post_date <= as_date("2025-10-04")
   ) %>% 
   select(
-    username, post_date, content, forward_count, review_count, like_count
+    username, post_date, content, forward_count, 
+    review_count, like_count, review_count, forward_count
   ) %>% 
   distinct()
 
@@ -97,11 +98,14 @@ data <- lapply(
 # Bug: 是否可靠？不清楚Octoparse的抓取方式。
 
 # 安踏股价。
-anta_stock <- tq_get("2020.HK", from = "2025-09-20", to = "2025-10-04")
+anta_stock <- 
+  tidyquant::tq_get("2020.HK", from = "2025-09-15", to = "2025-10-04") %>%
+  mutate(ma5 = SMA(close, n = 5)) %>% 
+  filter(date >= "2025-09-19")
 
-# 谷歌趋势：“蔡国强”、“始祖鸟”、“安踏”的谷歌趋势。
+# 谷歌趋势：“蔡国强”、“始祖鸟”、“安踏”、“喜马拉雅”的谷歌趋势。
 goo_trend <- lapply(
-  c("caiguoqiang_cn", "arctery_cn", "anta_cn"), 
+  c("caiguoqiang_cn", "arctery_cn", "anta_cn", "himalaya_cn"), 
   function(x) {
     read.csv(paste0("data_raw/", x, ".csv")) %>% 
       slice(-1) %>% 
@@ -120,6 +124,14 @@ all_dt_num_smry <-
   data %>% 
   # Bug: 将点赞数据转化成数字。
   mutate(
+    forward_count = case_when(
+      str_detect(forward_count, "转发") ~ 0,  # 含“赞”时设为0
+      TRUE ~ str_replace_all(forward_count, "万", "e4") %>% parse_number()
+    ), 
+    review_count = case_when(
+      str_detect(review_count, "评论") ~ 0,  # 含“赞”时设为0
+      TRUE ~ str_replace_all(review_count, "万", "e4") %>% parse_number()
+    ), 
     like_count = case_when(
       str_detect(like_count, "赞") ~ 0,  # 含“赞”时设为0
       TRUE ~ str_replace_all(like_count, "万", "e4") %>% parse_number()
@@ -127,13 +139,17 @@ all_dt_num_smry <-
   ) %>% 
   group_by(post_date) %>% 
   summarise(
-    weibo_num = n(), weibo_num_like = sum(like_count), .groups = "drop"
+    weibo_num = n(), 
+    weibo_num_forward = sum(forward_count), 
+    weibo_num_review = sum(review_count), 
+    weibo_num_like = sum(like_count), 
+    .groups = "drop"
   ) %>% 
   # 谷歌指数。
   left_join(goo_trend, by = c("post_date" = "date")) %>% 
   # 安踏股价。
   left_join(
-    anta_stock %>% select(date, adj_stock = adjusted), 
+    anta_stock %>% select(date, adj_stock = adjusted, ma5), 
     by = c("post_date" = "date")
   )
 
@@ -142,11 +158,19 @@ all_dt_num_smry <-
   ggplot(all_dt_num_smry, aes(post_date)) +
     geom_line(aes(y = weibo_num), color = "darkorange") +
     labs(x = "Date", y = "Weibo posts") +
+    scale_x_date(
+      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
+      labels = c("9-19", "9-22", "9-29")
+    ) + 
     theme_bw()
 ) / (
   ggplot(all_dt_num_smry, aes(post_date)) +
     geom_line(aes(y = weibo_num_like), color = "darkred") + 
-    labs(x = "Date", y = "Weibo likes") +
+    labs(x = NULL, y = "Weibo likes") +
+    scale_x_date(
+      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
+      labels = c("9-19", "9-22", "9-29")
+    ) + 
     theme_bw()
 ) / (
   all_dt_num_smry %>%
@@ -157,7 +181,8 @@ all_dt_num_smry <-
     mutate(
       keyword = recode(
         keyword, 
-        caiguoqiang_cn = "Cai Guoqiang", arctery_cn = "Arc'teryx", anta_cn = "Anta"
+        caiguoqiang_cn = "Cai Guoqiang", arctery_cn = "Arc'teryx", 
+        anta_cn = "Anta"
       ),
       keyword = factor(keyword, levels = c("Cai Guoqiang", "Arc'teryx", "Anta"))
     ) %>% 
@@ -171,6 +196,10 @@ all_dt_num_smry <-
     )) +
     labs(x = "Date", y = "Google trend\nindex", color = NULL, linetype = NULL) +
     theme_bw() +
+    scale_x_date(
+      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
+      labels = c("9-19", "9-22", "9-29")
+    ) + 
     theme(
       legend.position = c(0.95, 0.95),
       legend.justification = c(1, 1),
@@ -180,11 +209,33 @@ all_dt_num_smry <-
       legend.background = element_rect(fill = "white", color = "grey")
     )
 ) / (
-  ggplot(all_dt_num_smry, aes(post_date, adj_stock)) +
-    geom_line(color = "grey") +
-    geom_point(color = "grey2", size = 1) +
-    labs(x = "Date", y = "Adjusted stock\nprice (HKD)") +
-    theme_bw()
+  # 绘制K线图，包含5日均线。
+  ggplot(anta_stock, aes(x = date)) +
+    geom_segment(
+      aes(y = low, yend = high, xend = date, color = close > open)
+    ) +
+    geom_rect(
+      aes(
+        xmin = date - 0.3, xmax = date + 0.3,
+        ymin = pmin(open, close), ymax = pmax(open, close),
+        fill = close > open
+      ),
+      color = NA, 
+      linewidth = 0.1
+    ) +
+    scale_fill_manual(
+      values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
+    ) + 
+    scale_color_manual(
+      values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
+    ) + 
+    geom_line(aes(y = ma5), color = "orange") + 
+    labs(x = "Date", y = "Stock price (HKD)") +
+    scale_x_date(
+      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
+      labels = c("9-19", "9-22", "9-29")
+    ) + 
+    theme_bw() 
 )
 
 # 相关性。
