@@ -138,7 +138,7 @@ all_dt_num_smry <-
     )
   ) %>% 
   group_by(post_date) %>% 
-  summarise(
+  dplyr::summarise(
     weibo_num = n(), 
     weibo_num_forward = sum(forward_count), 
     weibo_num_review = sum(review_count), 
@@ -146,9 +146,9 @@ all_dt_num_smry <-
     .groups = "drop"
   ) %>% 
   # 谷歌指数。
-  left_join(goo_trend, by = c("post_date" = "date")) %>% 
+  full_join(goo_trend, by = c("post_date" = "date")) %>% 
   # 安踏股价。
-  left_join(
+  full_join(
     anta_stock %>% select(date, adj_stock = adjusted, ma5), 
     by = c("post_date" = "date")
   )
@@ -156,25 +156,34 @@ all_dt_num_smry <-
 # 各数据趋势。
 (
   ggplot(all_dt_num_smry, aes(post_date)) +
-    geom_line(aes(y = weibo_num), color = "darkorange") +
-    labs(x = "Date", y = "Weibo posts") +
+    # 1. 将颜色映射到 aes() 内部，使用描述性字符串作为图例键
+    geom_line(aes(y = weibo_num, color = "Weibo Posts")) +
+    geom_line(aes(y = weibo_num_like / 1000, color = "Likes / 1000")) + 
+    geom_line(aes(y = weibo_num_review / 100, color = "Reviews / 80")) +
+    geom_line(aes(y = weibo_num_forward /50 , color = "Forwards / 50")) + 
+    # 使用 scale_color_manual 来控制图例的外观
+    scale_color_manual(
+      breaks = c("Weibo Posts", "Likes / 1000","Reviews / 80", "Forwards / 50"), 
+      values = c("#8B0000", "#FF4500", "#FFD700", "#FF69B4")
+    ) + 
+    labs(x = "Date", y = "Weibo index", color = NULL, linetype = NULL) +
     scale_x_date(
+      limits = c(as.Date("2025-09-19"), NA),
       breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
       labels = c("9-19", "9-22", "9-29")
     ) + 
-    theme_bw()
-) / (
-  ggplot(all_dt_num_smry, aes(post_date)) +
-    geom_line(aes(y = weibo_num_like), color = "darkred") + 
-    labs(x = NULL, y = "Weibo likes") +
-    scale_x_date(
-      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
-      labels = c("9-19", "9-22", "9-29")
-    ) + 
-    theme_bw()
+    theme_bw() +
+    theme(
+      legend.position = c(0.95, 0.95),
+      legend.justification = c(1, 1),
+      legend.text = element_text(size = 8),
+      legend.key.height = unit(0.05, "lines"),
+      legend.spacing.y = unit(0.05, "lines"),
+      legend.background = element_rect(fill = "white", color = "grey")
+    )
 ) / (
   all_dt_num_smry %>%
-    select(post_date, caiguoqiang_cn, arctery_cn, anta_cn) %>%
+    select(post_date, caiguoqiang_cn, arctery_cn, anta_cn, himalaya_cn) %>%
     pivot_longer(
       -post_date, names_to  = "keyword", values_to = "value"
     ) %>%
@@ -182,21 +191,22 @@ all_dt_num_smry <-
       keyword = recode(
         keyword, 
         caiguoqiang_cn = "Cai Guoqiang", arctery_cn = "Arc'teryx", 
-        anta_cn = "Anta"
+        anta_cn = "Anta", himalaya_cn = "Himalaya"
       ),
-      keyword = factor(keyword, levels = c("Cai Guoqiang", "Arc'teryx", "Anta"))
+      keyword = factor(keyword, levels = c("Cai Guoqiang", "Arc'teryx", "Anta", "Himalaya"))
     ) %>% 
-    ggplot(aes(post_date, value, color = keyword, linetype = keyword)) + 
+    ggplot(aes(post_date, value, color = keyword)) + 
     geom_line(linewidth = 0.8) +
     scale_color_manual(values = c(
-      "Cai Guoqiang" = "#1f77b4", "Arc'teryx" = "#2ca02c", "Anta" = "#17becf"
-    )) +
-    scale_linetype_manual(values = c(
-      "Cai Guoqiang" = "solid", "Arc'teryx" = "dashed", "Anta" = "dotted"
+      "Cai Guoqiang" = "#1f77b4", 
+      "Arc'teryx" = "#2ca02c", 
+      "Anta" = "#17becf",
+      "Himalaya" = "purple"
     )) +
     labs(x = "Date", y = "Google trend\nindex", color = NULL, linetype = NULL) +
     theme_bw() +
     scale_x_date(
+      limits = c(as.Date("2025-09-19"), NA),
       breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
       labels = c("9-19", "9-22", "9-29")
     ) + 
@@ -237,6 +247,40 @@ all_dt_num_smry <-
     ) + 
     theme_bw() 
 )
+# 多Y轴版本。
+library(highcharter)
+
+highchart() %>% 
+  hc_add_series(
+    data = all_dt_num_smry, type = "line", name = "Weibo posts",
+    hcaes(x = post_date, y = weibo_num), yAxis = 0, color = "#FFD700"  # 金黄
+  ) %>% 
+  hc_add_series(
+    data = all_dt_num_smry, type = "line", name = "Weibo forwards",
+    hcaes(x = post_date, y = weibo_num_forward), yAxis = 1, color = "orange"
+  ) %>% 
+  hc_add_series(
+    data = all_dt_num_smry, type = "line", name = "Weibo reviews",
+    hcaes(x = post_date, y = weibo_num_review), yAxis = 2, color = "pink"
+  ) %>%
+  hc_add_series(
+    data = all_dt_num_smry, type = "line", name = "Weibo likes",
+    hcaes(x = post_date, y = weibo_num_like), yAxis = 3, color = "red"
+  ) %>% 
+  hc_xAxis(
+    type = "datetime",
+    breaks = as.numeric(as.POSIXct(c("2025-10-02", "2025-10-03")))*1000,  # 指定两天
+    labels = list(format = "{value:%m-%d}")  # 显示为 “10-02” “10-03”
+  ) %>% 
+  hc_yAxis_multiples(
+    list(lineWidth = 1, lineColor='yellow', title=list(text="Weibo posts")),
+    list(lineWidth = 1, lineColor="orange", title=list(text="Weibo forwards"), opposite=TRUE),
+    list(lineWidth = 1, lineColor="pink", title=list(text="Weibo reviews"), opposite=TRUE),
+    list(lineWidth = 1, lineColor="red", title=list(text="Weibo likes"), opposite=TRUE)
+  ) %>%
+  hc_plotOptions(
+    series = list(marker = list(enabled = FALSE))
+  )
 
 # 相关性。
 # 函数：输入数据框，获得每两列之间的相关系数。
