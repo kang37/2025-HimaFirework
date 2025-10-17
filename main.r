@@ -4,6 +4,7 @@ library(quanteda.textstats)
 library(quanteda.textplots)
 library(quanteda.textmodels) 
 library(dplyr)
+library(ggplot2)
 library(tidyr)
 library(stringr)
 library(openxlsx)
@@ -453,84 +454,65 @@ knitr::kable(head(tstat_col_ch, 10))
 # plot(my_lda_fit20)  
 
 # Coding ----
-# 1. 定义中文关键词列表
+# 1) 你的关键词表保持不变
 coding_keywords <- list(
-  # --- 1. 生态危害维度 (原有) ---
-  "animal" = c("动物", "雪豹", "鼠兔", "牲畜", "栖息地", "物种", "生灵", "惊扰", "迁徙", "受惊"),
-  "plant" = c("植被", "植物", "草", "地衣", "苔藓", "真菌", "草毡层", "修复", "绿化"),
-  "ecosystem" = c("生态", "环境", "脆弱", "高原", "冰川", "山脉", "自然", "破坏", "不可逆", "创伤"), 
-  
-  # --- 2. 污染信息维度 (新增) ---
-  "light" = c("光污染", "强光", "光害"),
-  "noise" = c("噪声", "噪音", "声响", "爆破声", "惊扰", "安静"),
-  "waste" = c("垃圾", "残渣", "遗留物", "清理", "杂物", "废物"),
-  "air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
-  "water" = c("水污染", "水体", "融水", "雪水", "河流"),
-  
-  # --- 3. 品牌/商业维度 ---
-  "company" = c("始祖鸟", "安踏", "品牌", "广告"),
-  "cai" = c("人设", "虚伪", "傲慢"),
-  
-  # --- 4. 诉求/行动维度 (新增) ---
-  "accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案", "判刑"),
-  "remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
-  "boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
+  animal = c("动物","雪豹","鼠兔","牲畜","栖息地","物种","生灵","惊扰","迁徙","受惊"),
+  plant  = c("植被","植物","草","地衣","苔藓","真菌","草毡层","修复","绿化"),
+  ecosystem = c("生态","环境","脆弱","高原","冰川","山脉","自然","破坏","不可逆","创伤"),
+  light = c("光污染","强光","光害"),
+  noise = c("噪声","噪音","声响","爆破声","惊扰","安静"),
+  waste = c("垃圾","残渣","遗留物","清理","杂物","废物"),
+  air   = c("空气污染","烟雾","大气","粉尘","PM2.5","颗粒物"),
+  water = c("水污染","水体","融水","雪水","河流"),
+  company = c("始祖鸟","安踏","品牌","广告"),
+  cai     = c("人设","虚伪","傲慢"),
+  accountability = c("调查","处罚","追责","立法","合规","审查","立案","判刑"),
+  remedy        = c("道歉","赔偿","修复","补救","清理","评估"),
+  boycott       = c("抵制","不买","下架","退货","转黑","卸载")
 )
 
-# 定义一个辅助函数，用于检查文本是否包含任何关键词
-# 辅助函数（与你之前定义的函数相同）
-detect_keywords <- function(text, keywords) {
-  # 确保文本转换为小写以匹配，提高健壮性（如果数据未预先处理）
-  text <- tolower(text) 
-  pattern <- paste(keywords, collapse = "|")
-  # str_detect 返回 TRUE/FALSE，转换为整数 1/0
+# 2) 子类 → 大类 的映射
+category_map <- c(
+  animal="生态危害", plant="生态危害", ecosystem="生态危害",
+  light="污染信息", noise="污染信息", waste="污染信息", air="污染信息", water="污染信息",
+  company="品牌/商业", cai="品牌/商业",
+  accountability="诉求/行动", remedy="诉求/行动", boycott="诉求/行动"
+)
+
+# 3) 关键词检测函数（更稳健：转小写对中文无影响；转义正则特殊字符）
+detect_keywords <- function(text, keywords){
+  kw <- str_replace_all(keywords, "([\\^$.|?*+()\\[\\]{}\\\\])", "\\\\\\1")
+  pattern <- str_c(kw, collapse="|")
   as.integer(str_detect(text, pattern))
 }
 
+# 4) 生成各子类 0/1 列
+coding_results_df <- map_dfc(coding_keywords, ~ detect_keywords(data$content, .x))
 
-# 批量计算所有新列的值
-# map_dfc (.dfc 返回一个数据框，列名沿用 list 的 names)
-coding_results_df <- map_dfc(coding_keywords, function(keywords) {
-  # 对数据框的 content 列应用 detect_keywords 函数
-  # 这里的 data 替换为你的数据框变量名
-  detect_keywords(data$content, keywords) 
-})
+data_coding <- data %>% bind_cols(coding_results_df)
 
-# 将结果列绑定到原始数据
-data_coding <- data %>%
-  bind_cols(coding_results_df)
-
-# 检查结果
-# 你现在应该能看到 animal, plant, ecosystem, pollution_light, brand_image 等所有新增列
-data_coding %>% 
-  select(matches("^(eco|call|pollution)_|brand")) %>% 
-  colSums()
-
-# Word cloud by topic ----
-# 提及各项比例的时间变化。
-# Bug: 只选取大于50条文本的日期分析。
+# 5) 汇总（每天各子类占比）
 get_coding_day_prop <- function(coding_col_name) {
   data_coding %>% 
     group_by(post_date) %>% 
     summarise(
-      coding_n = sum(get(coding_col_name) == 1), 
-      day_n = n(), 
-      prop = coding_n / day_n, 
+      coding_n = sum(.data[[coding_col_name]] == 1, na.rm = TRUE),
+      day_n    = n(),
+      prop     = coding_n / day_n,
       .groups = "drop"
     ) %>% 
     mutate(coding_col = coding_col_name, .before = 1)
 }
-coding_smry <- lapply(
-  names(coding_keywords), 
-  get_coding_day_prop
-) %>% 
-  bind_rows() %>% 
-  mutate(cat = str_extract(coding_col, "^[^_]+"))
-ggplot(coding_smry) + 
-  geom_area(
-    aes(post_date, prop, fill = coding_col), position = "dodge", 
-    alpha = 0.5
-  ) + 
-  facet_wrap(.~ cat)
-# Bug: 27日之后有什么新的主题出现吗？
+
+coding_smry <- map_df(names(coding_keywords), get_coding_day_prop) %>% 
+  # 用映射表得到大类
+  mutate(cat = recode(coding_col, !!!category_map))
+
+# 6) 可视化（示例：按大类分面）
+ggplot(coding_smry %>% filter(post_date > "2025-09-24")) + 
+  geom_area(aes(post_date, prop, fill = coding_col), position = "dodge", alpha = 0.5) +
+  facet_wrap(~ cat) +
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1)) +
+  labs(x="日期", y="占比", fill="子类") +
+  theme_minimal(base_size = 12)
 
