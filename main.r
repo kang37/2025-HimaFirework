@@ -166,11 +166,11 @@ all_dt_num_smry <-
       breaks = c("Weibo Posts", "Likes / 1000","Reviews / 80", "Forwards / 50"), 
       values = c("#8B0000", "#FF4500", "#FFD700", "#FF69B4")
     ) + 
-    labs(x = "Date", y = "Weibo index", color = NULL, linetype = NULL) +
+    labs(x = NULL, y = "Weibo index", color = NULL, linetype = NULL) +
     scale_x_date(
-      limits = c(as.Date("2025-09-19"), NA),
-      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
-      labels = c("9-19", "9-22", "9-29")
+      limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
+      breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
+      labels = c("9-19", "9-21", "09-26", "10-04")
     ) + 
     theme_bw() +
     theme(
@@ -203,12 +203,12 @@ all_dt_num_smry <-
       "Anta" = "#17becf",
       "Himalaya" = "purple"
     )) +
-    labs(x = "Date", y = "Google trend\nindex", color = NULL, linetype = NULL) +
+    labs(x = NULL, y = "Google trend\nindex", color = NULL, linetype = NULL) +
     theme_bw() +
     scale_x_date(
-      limits = c(as.Date("2025-09-19"), NA),
-      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
-      labels = c("9-19", "9-22", "9-29")
+      limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
+      breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
+      labels = c("9-19", "9-21", "09-26", "10-04")
     ) + 
     theme(
       legend.position = c(0.95, 0.95),
@@ -242,8 +242,9 @@ all_dt_num_smry <-
     geom_line(aes(y = ma5), color = "orange") + 
     labs(x = "Date", y = "Stock price (HKD)") +
     scale_x_date(
-      breaks = as.Date(c("2025-09-19", "2025-09-22", "2025-09-29")),
-      labels = c("9-19", "9-22", "9-29")
+      limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
+      breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
+      labels = c("9-19", "9-21", "09-26", "10-04")
     ) + 
     theme_bw() 
 )
