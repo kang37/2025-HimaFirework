@@ -5,7 +5,6 @@ library(quanteda.textplots)
 library(quanteda.textmodels) 
 library(dplyr)
 library(tidyr)
-# library(jiebaR)
 library(stringr)
 library(openxlsx)
 library(lubridate)
@@ -13,7 +12,6 @@ library(readr)
 library(purrr)
 library(tibble)
 library(showtext)
-library(plotly)
 library(rlang)
 library(LSX)
 library(patchwork)
@@ -92,10 +90,22 @@ data <- lapply(
     username, post_date, content, forward_count, 
     review_count, like_count, review_count, forward_count
   ) %>% 
-  distinct()
-
-# 数据量
-# Bug: 是否可靠？不清楚Octoparse的抓取方式。
+  distinct() %>% 
+  # 将点赞、评论、转发等转化成数字。
+  mutate(
+    forward_count = case_when(
+      str_detect(forward_count, "转发") ~ 0,  # 含“赞”时设为0
+      TRUE ~ str_replace_all(forward_count, "万", "e4") %>% parse_number()
+    ), 
+    review_count = case_when(
+      str_detect(review_count, "评论") ~ 0,  # 含“赞”时设为0
+      TRUE ~ str_replace_all(review_count, "万", "e4") %>% parse_number()
+    ), 
+    like_count = case_when(
+      str_detect(like_count, "赞") ~ 0,  # 含“赞”时设为0
+      TRUE ~ str_replace_all(like_count, "万", "e4") %>% parse_number()
+    )
+  )
 
 # 安踏股价。
 anta_stock <- 
@@ -119,24 +129,10 @@ goo_trend <- lapply(
 
 # 舆论变量数量汇总：微博文本数，安踏股价，谷歌趋势。
 # Bug: 百度指数暂时无法获得。
+# Bug: 微博数据量是否可靠？不清楚Octoparse的抓取方式。
 all_dt_num_smry <- 
   # 微博文本数。
   data %>% 
-  # Bug: 将点赞数据转化成数字。
-  mutate(
-    forward_count = case_when(
-      str_detect(forward_count, "转发") ~ 0,  # 含“赞”时设为0
-      TRUE ~ str_replace_all(forward_count, "万", "e4") %>% parse_number()
-    ), 
-    review_count = case_when(
-      str_detect(review_count, "评论") ~ 0,  # 含“赞”时设为0
-      TRUE ~ str_replace_all(review_count, "万", "e4") %>% parse_number()
-    ), 
-    like_count = case_when(
-      str_detect(like_count, "赞") ~ 0,  # 含“赞”时设为0
-      TRUE ~ str_replace_all(like_count, "万", "e4") %>% parse_number()
-    )
-  ) %>% 
   group_by(post_date) %>% 
   dplyr::summarise(
     weibo_num = n(), 
@@ -250,7 +246,6 @@ all_dt_num_smry <-
 )
 # 多Y轴版本。
 library(highcharter)
-
 highchart() %>% 
   hc_add_series(
     data = all_dt_num_smry, type = "line", name = "Weibo posts",
@@ -326,7 +321,7 @@ get_cor <- function(df_x) {
 }
 get_cor(all_dt_num_smry)
 
-# 将你的评论文本列 (comment_text) 转换为 quanteda 语料库
+# 将你的评论文本列 (comment_text) 转换为quanteda语料库。
 weibo_corpus <- corpus(
   data, text_field = "content", docid_field = "doc_id"
 ) 
@@ -461,25 +456,25 @@ knitr::kable(head(tstat_col_ch, 10))
 # 1. 定义中文关键词列表
 coding_keywords <- list(
   # --- 1. 生态危害维度 (原有) ---
-  "eco_animal" = c("动物", "雪豹", "鼠兔", "牲畜", "栖息地", "物种", "生灵", "惊扰", "迁徙", "受惊"),
-  "eco_plant" = c("植被", "植物", "草", "地衣", "苔藓", "真菌", "草毡层", "修复", "绿化"),
-  "eco_ecosystem" = c("生态", "环境", "脆弱", "高原", "冰川", "山脉", "自然", "破坏", "不可逆", "创伤"), 
+  "animal" = c("动物", "雪豹", "鼠兔", "牲畜", "栖息地", "物种", "生灵", "惊扰", "迁徙", "受惊"),
+  "plant" = c("植被", "植物", "草", "地衣", "苔藓", "真菌", "草毡层", "修复", "绿化"),
+  "ecosystem" = c("生态", "环境", "脆弱", "高原", "冰川", "山脉", "自然", "破坏", "不可逆", "创伤"), 
   
   # --- 2. 污染信息维度 (新增) ---
-  "pollution_light" = c("光污染", "强光", "光害"),
-  "pollution_noise" = c("噪声", "噪音", "声响", "爆破声", "惊扰", "安静"),
-  "pollution_waste" = c("垃圾", "残渣", "遗留物", "清理", "杂物", "废物"),
-  "pollution_air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
-  "pollution_water" = c("水污染", "水体", "融水", "雪水", "河流"),
+  "light" = c("光污染", "强光", "光害"),
+  "noise" = c("噪声", "噪音", "声响", "爆破声", "惊扰", "安静"),
+  "waste" = c("垃圾", "残渣", "遗留物", "清理", "杂物", "废物"),
+  "air" = c("空气污染", "烟雾", "大气", "粉尘", "PM2.5", "颗粒物"),
+  "water" = c("水污染", "水体", "融水", "雪水", "河流"),
   
   # --- 3. 品牌/商业维度 ---
-  "brand_company" = c("始祖鸟", "安踏", "品牌", "广告"),
-  "brand_cai" = c("人设", "虚伪", "傲慢"),
+  "company" = c("始祖鸟", "安踏", "品牌", "广告"),
+  "cai" = c("人设", "虚伪", "傲慢"),
   
   # --- 4. 诉求/行动维度 (新增) ---
-  "act_accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案", "判刑"),
-  "act_remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
-  "act_boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
+  "accountability" = c("调查", "处罚", "追责", "立法", "合规", "审查", "立案", "判刑"),
+  "remedy" = c("道歉", "赔偿", "修复", "补救", "清理", "评估"),
+  "boycott" = c("抵制", "不买", "下架", "退货", "转黑", "卸载")
 )
 
 # 定义一个辅助函数，用于检查文本是否包含任何关键词
