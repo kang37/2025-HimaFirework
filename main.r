@@ -473,8 +473,44 @@ detect_keywords <- function(text, keywords){
 coding_results_df <- map_dfc(coding_keywords, ~ detect_keywords(data$content, .x))
 
 data_coding <- data %>% 
-  bind_cols(coding_results_df) %>% 
-  mutate(weight_score = 1)
+  bind_cols(coding_results_df)
+
+# 编码主题分类。
+coding_cat <- rbind(
+  data.frame(cat = "environment", cat_sub = c("animal", "plant", "ecosystem")), 
+  data.frame(
+    cat = "pollution", cat_sub = c("light", "noise", "waste", "air", "water")
+  ), 
+  data.frame(cat = "brand", cat_sub = c("company", "cai")),
+  data.frame(cat = "act", cat_sub = c("accountability", "remedy", "boycott"))
+)
+
+# 汇总编码结果。
+coding_smry <- data_coding %>% 
+  pivot_longer(
+    cols = coding_cat$cat_sub, names_to = "cat_sub", values_to = "mention"
+  ) %>% 
+  left_join(coding_cat, by = "cat_sub") %>% 
+  # 计算各天总提及数量。
+  group_by(post_date) %>% 
+  mutate(day_tot_mention = sum(mention)) %>% 
+  ungroup() %>% 
+  # 计算每天各主题提及数量。
+  group_by(post_date, cat) %>% 
+  mutate(day_cat_mention = sum(mention)) %>% 
+  ungroup() %>% 
+  # 计算各天子各主题的提及数量，并计算它们在一天内各主题的比例。
+  group_by(post_date, cat, cat_sub, day_tot_mention, day_cat_mention) %>% 
+  summarise(day_catsub_mention = sum(mention), .groups = "drop") %>% 
+  mutate(mention_prop = day_catsub_mention / day_cat_mention) %>% 
+  filter(mention_prop != 0)
+
+# 作图。
+ggplot() + 
+  geom_col(aes(post_date, mention_prop, fill = cat_sub)) + 
+  facet_grid(.~ cat)
+  
+  
 
 # 3️⃣ 加权比例函数：跳过发帖数 < 50 的日期
 get_coding_day_prop_weighted <- function(coding_col_name) {
