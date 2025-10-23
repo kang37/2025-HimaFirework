@@ -1,26 +1,9 @@
-# Package ----
-library(quanteda)
-library(quanteda.textstats)
-library(quanteda.textplots)
-library(quanteda.textmodels) 
-library(dplyr)
-library(ggplot2)
-library(tidyr)
-library(stringr)
-library(openxlsx)
-library(lubridate)
-library(readr)
-library(purrr)
-library(tibble)
-library(showtext)
-library(rlang)
-library(LSX)
-library(patchwork)
-library(quantmod)
-library(Hmisc)
-library(reshape2)
-library(TTR)
-
+# Preparation ----
+pacman::p_load(
+  quanteda, quanteda.textstats, quanteda.textplots, quanteda.textmodels, 
+  dplyr, ggplot2, tidyr, stringr, openxlsx, lubridate, readr, purrr, tibble, 
+  showtext, rlang, LSX, patchwork, quantmod, Hmisc, reshape2, TTR
+)
 showtext_auto()
 
 # Basic data ----
@@ -458,7 +441,7 @@ knitr::kable(head(tstat_col_ch, 10))
 coding_keywords <- list(
   animal = c("动物","雪豹","鼠兔","牲畜","栖息地","物种","生灵","惊扰","迁徙","受惊"),
   plant  = c("植被","植物","草","地衣","苔藓","真菌","草毡层","修复","绿化"),
-  ecosystem = c("生态","环境","脆弱","高原","冰川","山脉","自然","破坏","不可逆","创伤"),
+  ecosystem = c("生态", "脆弱","高原","冰川","山脉","自然", "不可逆"),
   light = c("光污染","强光","光害"),
   noise = c("噪声","噪音","声响","爆破声","惊扰","安静"),
   waste = c("垃圾","残渣","遗留物","清理","杂物","废物"),
@@ -489,30 +472,43 @@ detect_keywords <- function(text, keywords){
 # 4) 生成各子类 0/1 列
 coding_results_df <- map_dfc(coding_keywords, ~ detect_keywords(data$content, .x))
 
-data_coding <- data %>% bind_cols(coding_results_df)
+data_coding <- data %>% 
+  bind_cols(coding_results_df) %>% 
+  mutate(weight_score = 1)
 
-# 5) 汇总（每天各子类占比）
-get_coding_day_prop <- function(coding_col_name) {
-  data_coding %>% 
-    group_by(post_date) %>% 
+# 3️⃣ 加权比例函数：跳过发帖数 < 50 的日期
+get_coding_day_prop_weighted <- function(coding_col_name) {
+  data_coding %>%
+    group_by(post_date) %>%
     summarise(
-      coding_n = sum(.data[[coding_col_name]] == 1, na.rm = TRUE),
-      day_n    = n(),
-      prop     = coding_n / day_n,
+      day_n           = n(),
+      weighted_coding = sum(weight_score * .data[[coding_col_name]], na.rm = TRUE),
+      total_weight    = sum(weight_score, na.rm = TRUE),
+      prop_raw        = weighted_coding / total_weight,
       .groups = "drop"
-    ) %>% 
-    mutate(coding_col = coding_col_name, .before = 1)
+    ) %>%
+    mutate(
+      prop = ifelse(day_n >= 20, prop_raw, NA_real_),  # 小于50条则设为 NA
+      coding_col = coding_col_name,
+      .before = 1
+    ) %>%
+    select(-prop_raw)  # 可选，去掉中间列
 }
 
-coding_smry <- map_df(names(coding_keywords), get_coding_day_prop) %>% 
-  # 用映射表得到大类
+# 4️⃣ 批量计算所有主题
+coding_smry_weighted <- map_df(names(coding_keywords), get_coding_day_prop_weighted) %>%
   mutate(cat = recode(coding_col, !!!category_map))
 
-# 6) 可视化（示例：按大类分面）
-ggplot(coding_smry %>% filter(post_date > "2025-09-24")) + 
+# 5️⃣ 可视化
+ggplot(coding_smry_weighted) +
   geom_area(aes(post_date, prop, fill = coding_col), position = "dodge", alpha = 0.5) +
-  facet_wrap(~ cat) +
-  scale_y_continuous(labels=scales::percent_format(accuracy = 1)) +
-  labs(x="日期", y="占比", fill="子类") +
+  facet_wrap(~cat) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    x = "日期",
+    y = "加权占比（考虑传播量，仅≥50条日样本）",
+    fill = "主题"
+  ) +
+  lims(x = c(as_date("2025-09-19"), as_date("2025-10-04"))) + 
   theme_minimal(base_size = 12)
 
