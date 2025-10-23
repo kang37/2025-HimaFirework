@@ -1,29 +1,74 @@
 # Sankey ----
-library(dplyr)
-library(ggplot2)
 library(ggsankey)
 
 # 1) 计算从 cat → coding_col 的权重
 flows <- coding_smry %>%
-  group_by(cat, coding_col) %>%
-  summarise(value = sum(coding_n, na.rm = TRUE), .groups = "drop")
+  group_by(cat, cat_sub) %>%
+  summarise(value = sum(day_catsub_mention, na.rm = TRUE), .groups = "drop")
 
 # 2) 转换为 ggsankey 长格式
-df_long <- ggsankey::make_long(flows, cat, coding_col, value = value)
+df_long <- ggsankey::make_long(flows, cat, cat_sub, value = value)
 
 # 3) 建立映射：每个 coding_col 对应的 cat
-map_tbl <- flows %>% distinct(coding_col, cat)
+map_tbl <- flows %>% distinct(cat_sub, cat)
+
+# 桑基图节点因子排序。
+coding_smry %>% 
+  group_by(cat) %>% 
+  summarise(cat_mention = sum(day_cat_mention), .groups = "drop") %>% 
+  arrange(cat_mention) %>% 
+  pull(cat)
+coding_fac_lvl <- coding_smry %>% 
+  # 计算主题比例。
+  group_by(cat) %>% 
+  mutate(cat_mention = sum(day_cat_mention)) %>% 
+  ungroup() %>% 
+  # 计算子主题比例。
+  group_by(cat, cat_sub, cat_mention) %>% 
+  summarise(catsub_mention = sum(day_catsub_mention), .groups = "drop") %>% 
+  # 排序。
+  arrange(cat_mention, cat, catsub_mention)
 
 df_long <- df_long %>%
   mutate(
     # 左边节点是cat
     cat_left = ifelse(x == "cat", node, NA_character_)
   ) %>%
-  left_join(map_tbl, by = c("node" = "coding_col")) %>%
+  left_join(map_tbl, by = c("node" = "cat_sub")) %>%
   mutate(
     cat_fill = dplyr::coalesce(cat_left, cat)
   ) %>%
-  select(-cat_left, -cat)
+  select(-cat_left, -cat) %>% 
+  # 设置节点排序。
+  mutate(
+    node = factor(
+      node, levels = c(unique(coding_fac_lvl$cat), coding_fac_lvl$cat_sub)
+    ),
+    next_node = factor(
+      next_node, levels = c(unique(coding_fac_lvl$cat), coding_fac_lvl$cat_sub)
+    )
+  ) 
+
+# 5) 绘图
+ggplot(
+  df_long,
+  aes(x = x, next_x = next_x, node = node, next_node = next_node,
+      value = value, fill = node)
+) +
+  geom_sankey(flow.alpha = 0.7, node.color = "grey30", width = 0.5) + # 👈 调整这里
+  geom_sankey_label(aes(label = node), size = 3, col = NA, fill = NA, text.color = "black") +
+  scale_fill_manual(values = node_colors, name = NULL) +
+  labs(x = NULL, y = "sum(coding_n)") +
+  ggsankey::theme_sankey(base_size = 12) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+  )
+
+
+
+
+
 
 # 4) 手动指定颜色（包括右侧各节点）
 node_colors <- c(
@@ -55,21 +100,7 @@ node_colors <- c(
   "act_boycott"    = "#9ecae1"
 )
 
-# 5) 绘图
-ggplot(
-  df_long,
-  aes(x = x, next_x = next_x, node = node, next_node = next_node,
-      value = value, fill = node)
-) +
-  geom_sankey(flow.alpha = 0.7, node.color = "grey30", width = 0.5) + # 👈 调整这里
-  geom_sankey_label(aes(label = node), size = 3, col = NA, fill = NA, text.color = "black") +
-  scale_fill_manual(values = node_colors, name = NULL) +
-  labs(x = NULL, y = "sum(coding_n)") +
-  ggsankey::theme_sankey(base_size = 12) +
-  theme(
-    legend.position = "none",
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
-  )
+
 
 
 # Area plot ----
