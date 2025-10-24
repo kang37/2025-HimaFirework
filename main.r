@@ -2,7 +2,7 @@
 pacman::p_load(
   quanteda, quanteda.textstats, quanteda.textplots, quanteda.textmodels, 
   dplyr, ggplot2, tidyr, stringr, openxlsx, lubridate, readr, purrr, tibble, 
-  showtext, rlang, LSX, patchwork, quantmod, Hmisc, reshape2, TTR
+  showtext, rlang, LSX, patchwork, quantmod, Hmisc, reshape2, TTR, ggsankey
 )
 showtext_auto()
 
@@ -94,7 +94,6 @@ data <- lapply(
 # 安踏股价。
 anta_stock <- 
   tidyquant::tq_get("2020.HK", from = "2025-09-15", to = "2025-10-04") %>%
-  mutate(ma5 = SMA(close, n = 5)) %>% 
   filter(date >= "2025-09-19")
 
 # 谷歌趋势：“蔡国强”、“始祖鸟”、“安踏”、“喜马拉雅”的谷歌趋势。
@@ -129,9 +128,19 @@ all_dt_num_smry <-
   full_join(goo_trend, by = c("post_date" = "date")) %>% 
   # 安踏股价。
   full_join(
-    anta_stock %>% select(date, adj_stock = adjusted, ma5), 
+    anta_stock %>% select(date, adj_stock = adjusted), 
     by = c("post_date" = "date")
-  )
+  ) %>% 
+  # 股价环比变化量和变化率。
+  arrange(post_date) %>%
+  mutate(
+    # 取出所有非 NA 股价对应日期的向量
+    valid_stock = ifelse(!is.na(adj_stock), adj_stock, NA_real_),
+    prev_stock = zoo::na.locf(adj_stock, na.rm = FALSE), # 向前填充上一个非 NA 值
+    prev_stock = lag(prev_stock),
+    stock_change = adj_stock - prev_stock
+  ) %>%
+  select(-valid_stock, -prev_stock)
 
 # 各数据趋势。
 (
@@ -219,7 +228,6 @@ all_dt_num_smry <-
     scale_color_manual(
       values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
     ) + 
-    geom_line(aes(y = ma5), color = "orange") + 
     labs(x = "Date", y = "Stock price (HKD)") +
     scale_x_date(
       limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
