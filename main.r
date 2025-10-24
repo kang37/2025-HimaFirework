@@ -315,7 +315,7 @@ get_cor(all_dt_num_smry)
 
 # 将你的评论文本列 (comment_text) 转换为quanteda语料库。
 weibo_corpus <- corpus(
-  data, text_field = "content", docid_field = "doc_id"
+  data_coding, text_field = "content", docid_field = "doc_id"
 ) 
 
 # 中文停止词。
@@ -396,6 +396,32 @@ topfeatures(dfmat_ch, 30) %>%
   geom_col(aes(term, freq)) + 
   coord_flip() + 
   theme_bw()
+
+# 分主题绘制高频词汇图。
+# 定义一个函数：给定主题名 -> 输出高频词图
+plot_top_terms_by_theme <- function(dfm, theme_name, n = 20) {
+  # 筛选该主题的文档（该列为1）
+  theme_dfm <- dfm[docvars(dfm)[[theme_name]] == 1, ]
+  
+  # 提取高频词
+  top_terms <- topfeatures(theme_dfm, n = n) %>%
+    as.data.frame() %>%
+    rename_with(~ "freq") %>%
+    rownames_to_column(var = "term") %>%
+    mutate(term = factor(term, levels = rev(term)))
+  
+  # 画图
+  ggplot(top_terms, aes(term, freq)) +
+    geom_col(fill = "#2c7fb8") +
+    coord_flip() +
+    theme_bw(base_size = 12) +
+    labs(
+      title = paste("Top", n, ":", theme_name),
+      x = NULL, y = "Frequency"
+    )
+}
+# 批量绘制每个主题
+wrap_plots(map(theme_cols, ~ plot_top_terms_by_theme(dfmat_ch, .x)), ncol = 7)
 
 # 词云
 # Plot a word cloud
