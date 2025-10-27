@@ -286,4 +286,5 @@ coding_smry %>%
   # 各子主题占总提及数的百分比。
   mutate(
     catsub_to_tot = round(cat_sub_mention / sum(cat_sub_mention) * 100, digits = 2)
-  )
+  ) %>% 
+  write.xlsx("data_proc/coding_subcategory_summary.xlsx")
