@@ -281,7 +281,228 @@ get_cor <- function(df_x) {
     labs(fill = "r") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
-get_cor(all_dt_num_smry)
+get_cor(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward))
+
+## Cor plot for paper ----
+# 函数：用圆圈展示相关系数矩阵
+# 圆圈大小 = 相关系数绝对值
+# 颜色 = 正相关(橙色) vs 负相关(绿色)
+# 显著性 = 不显著的圆圈上蒙半透明白色
+get_cor_circle <- function(df_x, label_map = NULL) {
+  # 去掉日期列，只保留数值列
+  num_df <- df_x %>%
+    select(-post_date)
+  
+  # 如果没有提供标签映射，创建默认的首字母大写标签
+  if (is.null(label_map)) {
+    label_map <- setNames(
+      tools::toTitleCase(gsub("_", " ", names(num_df))),
+      names(num_df)
+    )
+  }
+  
+  # 计算相关系数和p值
+  rc <- rcorr(as.matrix(num_df), type = "spearman")
+  cor_mat <- rc$r
+  p_mat   <- rc$P
+  
+  # 把矩阵转成长表
+  cor_long <- melt(cor_mat, na.rm = TRUE)
+  p_long   <- melt(p_mat, na.rm = TRUE)
+  merged   <- left_join(cor_long, p_long, by = c("Var1", "Var2"))
+  names(merged) <- c("Var1", "Var2", "cor", "p")
+  
+  # 应用标签映射
+  merged <- merged %>%
+    mutate(
+      Var1_label = label_map[as.character(Var1)],
+      Var2_label = label_map[as.character(Var2)],
+      # 显著性判断
+      # Bug: 边缘显著？
+      significant = p < 0.1,
+      # 相关系数的绝对值（用于圆圈大小）
+      abs_cor = abs(cor),
+      # 相关方向（正/负）
+      direction = ifelse(cor >= 0, "positive", "negative"),
+      # 显著性标记
+      sig = case_when(
+        p < 0.001 ~ "***",
+        p < 0.01  ~ "**",
+        p < 0.05  ~ "*",
+        p < 0.1   ~ ".",
+        TRUE      ~ ""
+      )
+    )
+  
+  # 设置因子顺序（保持原始顺序）
+  var_order <- unique(merged$Var1_label)
+  merged <- merged %>%
+    mutate(
+      Var1_label = factor(Var1_label, levels = var_order),
+      Var2_label = factor(Var2_label, levels = var_order)
+    )
+  
+  # 绘图
+  p <- ggplot(merged, aes(x = Var1_label, y = Var2_label)) +
+    # 绘制圆圈，大小由相关系数绝对值决定，颜色由正负决定
+    geom_point(aes(size = abs_cor, color = direction), alpha = 1) +
+    # 为不显著的点添加半透明白色圆圈（覆盖层）
+    geom_point(
+      data = merged %>% filter(!significant),
+      aes(size = abs_cor),
+      color = "white",
+      alpha = 0.9  # 半透明
+    ) +
+    # 设置圆圈颜色：橙色(正相关)，绿色(负相关)
+    scale_color_manual(
+      values = c("positive" = "#ff7f00", "negative" = "#33a02c"),
+      labels = c("positive" = "Positive", "negative" = "Negative")
+    ) +
+    # 设置圆圈大小范围
+    scale_size_continuous(range = c(1, 10), limits = c(0, 1)) +
+    # 主题设置
+    theme_minimal(base_size = 12) +
+    labs(
+      color = "Correlation",
+      size = "|Correlation\ncoefficient (r)|",
+      x = NULL,
+      y = NULL
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+      axis.text.y = element_text(size = 10),
+      panel.grid.major = element_line(color = "grey90"),
+      legend.position = "right"
+    ) +
+    # 确保坐标轴比例一致
+    coord_fixed()
+  
+  return(p)
+}
+
+# 可选：添加相关系数文本标签的版本
+get_cor_circle_with_text <- function(df_x, label_map = NULL) {
+  # 去掉日期列，只保留数值列
+  num_df <- df_x %>%
+    select(-post_date)
+  
+  # 如果没有提供标签映射，创建默认的首字母大写标签
+  if (is.null(label_map)) {
+    label_map <- setNames(
+      tools::toTitleCase(gsub("_", " ", names(num_df))),
+      names(num_df)
+    )
+  }
+  
+  # 计算相关系数和p值
+  rc <- rcorr(as.matrix(num_df), type = "spearman")
+  cor_mat <- rc$r
+  p_mat   <- rc$P
+  
+  # 把矩阵转成长表
+  cor_long <- melt(cor_mat, na.rm = TRUE)
+  p_long   <- melt(p_mat, na.rm = TRUE)
+  merged   <- left_join(cor_long, p_long, by = c("Var1", "Var2"))
+  names(merged) <- c("Var1", "Var2", "cor", "p")
+  
+  # 应用标签映射
+  merged <- merged %>%
+    mutate(
+      Var1_label = label_map[as.character(Var1)],
+      Var2_label = label_map[as.character(Var2)],
+      # 显著性判断
+      # Bug: 边缘显著？
+      significant = p < 0.1,
+      # 相关系数的绝对值（用于圆圈大小）
+      abs_cor = abs(cor),
+      # 相关方向（正/负）
+      direction = ifelse(cor >= 0, "positive", "negative"),
+      # 显著性标记
+      sig = case_when(
+        p < 0.001 ~ "***",
+        p < 0.01  ~ "**",
+        p < 0.05  ~ "*",
+        p < 0.1   ~ ".",
+        TRUE      ~ ""
+      ),
+      # 用于显示的标签
+      label = paste0(round(cor, 2), sig)
+    )
+  
+  # 设置因子顺序
+  var_order <- unique(merged$Var1_label)
+  merged <- merged %>%
+    mutate(
+      Var1_label = factor(Var1_label, levels = var_order),
+      Var2_label = factor(Var2_label, levels = var_order)
+    )
+  
+  # 绘图
+  p <- ggplot(merged, aes(x = Var1_label, y = Var2_label)) +
+    # 绘制圆圈
+    geom_point(aes(size = abs_cor, color = direction), alpha = 1) +
+    # 为不显著的点添加半透明白色圆圈
+    geom_point(
+      data = merged %>% filter(!significant),
+      aes(size = abs_cor),
+      color = "white",
+      alpha = 0.9
+    ) +
+    # 添加文本标签
+    geom_text(aes(label = label), size = 3, color = "black") +
+    # 设置颜色
+    scale_color_manual(
+      values = c("positive" = "#ff7f00", "negative" = "#33a02c"),
+      labels = c("positive" = "Positive", "negative" = "Negative")
+    ) +
+    # 设置圆圈大小
+    scale_size_continuous(range = c(1, 10), limits = c(0, 1)) +
+    # 主题设置
+    theme_minimal(base_size = 12) +
+    labs(
+      color = "Correlation",
+      size = "|Correlation\ncoefficient (r)|",
+      x = NULL,
+      y = NULL
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, size = 10),
+      axis.text.y = element_text(size = 10),
+      panel.grid.major = element_line(color = "grey90"),
+      legend.position = "right"
+    ) +
+    coord_fixed()
+  
+  return(p)
+}
+
+# ========================================
+# 为实际变量创建自定义标签映射
+# ========================================
+
+custom_labels <- c(
+  # 微博相关指标
+  "weibo_num" = "Weibo Posts",
+  "weibo_num_review" = "Comments",
+  "weibo_num_like" = "Likes",
+  
+  # 品牌相关
+  "caiguoqiang_cn" = "Cai Guoqiang",
+  "arctery_cn" = "Arc'teryx",
+  "anta_cn" = "Anta",
+  "himalaya_cn" = "Himalaya",
+  
+  # 股票相关
+  "stock_change" = "Stock Change"
+)
+
+# 使用自定义标签（基础版本）
+png("data_proc/correlation_circle.png", width = 1600, height = 1200, res = 300)
+get_cor_circle(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward), label_map = custom_labels)
+dev.off()
+
+# 使用自定义标签（带文本版本）
+get_cor_circle_with_text(all_dt_num_smry %>% select(-adj_stock), label_map = custom_labels)
 
 # 将你的评论文本列 (comment_text) 转换为quanteda语料库。
 weibo_corpus <- corpus(
