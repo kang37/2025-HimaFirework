@@ -7,7 +7,7 @@ pacman::p_load(
 showtext_auto()
 
 # Basic data ----
-# 函数：推算日期。从一个data.frame的一列中提取日期。这列中有两种类型数据，一类类似于“2025/09/28 11:35:15”，另一类类似于“1小时前 转赞人数超过100”。对于前者，直接提取日期并转化成日期类型，对于后者，我的数据下载时间是2025-09-29 10:55:00，根据这个推算。
+# 函数：推算日期。从一个数据框的一列中提取日期。这列中有两种类型数据，一类类似于“2025/09/28 11:35:15”，另一类类似于“1小时前 转赞人数超过100”。对于前者，直接提取日期并转化成日期类型，对于后者，我的数据下载时间是2025-09-29 10:55:00，根据这个推算。
 # 定义推算相对日期的函数
 calc_relative_date <- function(time_str, download_time) {
   # 提取下载时间。
@@ -143,17 +143,19 @@ all_dt_num_smry <-
   select(-valid_stock, -prev_stock)
 
 # 各数据趋势。
+png("data_proc/time_series_weibo_google_stock.png", 
+    width = 1600, height = 2000, res = 300
+)
 (
   ggplot(all_dt_num_smry, aes(post_date)) +
     # 1. 将颜色映射到 aes() 内部，使用描述性字符串作为图例键
     geom_line(aes(y = weibo_num, color = "Weibo Posts")) +
     geom_line(aes(y = weibo_num_like / 1000, color = "Likes / 1000")) + 
     geom_line(aes(y = weibo_num_review / 100, color = "Reviews / 80")) +
-    geom_line(aes(y = weibo_num_forward /50 , color = "Forwards / 50")) + 
     # 使用 scale_color_manual 来控制图例的外观
     scale_color_manual(
-      breaks = c("Weibo Posts", "Likes / 1000","Reviews / 80", "Forwards / 50"), 
-      values = c("#8B0000", "#FF4500", "#FFD700", "#FF69B4")
+      breaks = c("Weibo Posts", "Likes / 1000","Reviews / 80"), 
+      values = c("#8B0000", "#FF4500", "#FFD700")
     ) + 
     labs(x = NULL, y = "Weibo index", color = NULL, linetype = NULL) +
     scale_x_date(
@@ -236,39 +238,7 @@ all_dt_num_smry <-
     ) + 
     theme_bw() 
 )
-# 多Y轴版本。
-library(highcharter)
-highchart() %>% 
-  hc_add_series(
-    data = all_dt_num_smry, type = "line", name = "Weibo posts",
-    hcaes(x = post_date, y = weibo_num), yAxis = 0, color = "#FFD700"  # 金黄
-  ) %>% 
-  hc_add_series(
-    data = all_dt_num_smry, type = "line", name = "Weibo forwards",
-    hcaes(x = post_date, y = weibo_num_forward), yAxis = 1, color = "orange"
-  ) %>% 
-  hc_add_series(
-    data = all_dt_num_smry, type = "line", name = "Weibo reviews",
-    hcaes(x = post_date, y = weibo_num_review), yAxis = 2, color = "pink"
-  ) %>%
-  hc_add_series(
-    data = all_dt_num_smry, type = "line", name = "Weibo likes",
-    hcaes(x = post_date, y = weibo_num_like), yAxis = 3, color = "red"
-  ) %>% 
-  hc_xAxis(
-    type = "datetime",
-    breaks = as.numeric(as.POSIXct(c("2025-10-02", "2025-10-03")))*1000,  # 指定两天
-    labels = list(format = "{value:%m-%d}")  # 显示为 “10-02” “10-03”
-  ) %>% 
-  hc_yAxis_multiples(
-    list(lineWidth = 1, lineColor='yellow', title=list(text="Weibo posts")),
-    list(lineWidth = 1, lineColor="orange", title=list(text="Weibo forwards"), opposite=TRUE),
-    list(lineWidth = 1, lineColor="pink", title=list(text="Weibo reviews"), opposite=TRUE),
-    list(lineWidth = 1, lineColor="red", title=list(text="Weibo likes"), opposite=TRUE)
-  ) %>%
-  hc_plotOptions(
-    series = list(marker = list(enabled = FALSE))
-  )
+dev.off()
 
 # 相关性。
 # 函数：输入数据框，获得每两列之间的相关系数。
@@ -543,8 +513,7 @@ coding_smry <- data_coding %>%
 ggplot() + 
   geom_col(aes(post_date, mention_prop, fill = cat_sub)) + 
   facet_grid(.~ cat)
-  
-  
+
 
 # 3️⃣ 加权比例函数：跳过发帖数 < 50 的日期
 get_coding_day_prop_weighted <- function(coding_col_name) {
