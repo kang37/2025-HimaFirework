@@ -1,3 +1,33 @@
+# 手动指定节点和箭头颜色。
+cat_colors <- c(
+  # 主题颜色。
+  "environment" = "#1b9e77",
+  "pollution" = "#d73027",
+  "brand" = "#756bb1",
+  "act" = "#08519c",
+  
+  # ==== eco 子类 ====
+  "animal" = "#33a02c",
+  "plant" = "#66c2a5",
+  "ecosystem" = "#b2df8a",
+  
+  # ==== pollution 子类 ====
+  "light" = "#fc8d59",
+  "noise" = "#ef6548",
+  "waste" = "#d7301f",
+  "air" = "#f46d43",
+  "water" = "#fee090",
+  
+  # ==== brand 子类 ====
+  "company" = "#9e9ac8",
+  "cai" = "#6a51a3",
+  
+  # ==== act 子类 ====
+  "accountability" = "#3182bd",
+  "remedy" = "#6baed6",
+  "boycott" = "#9ecae1"
+)
+
 # Sankey ----
 # 1) 计算从 cat → coding_col 的权重
 flows <- coding_smry %>%
@@ -48,54 +78,47 @@ df_long <- df_long %>%
  ) 
 
 # 5) 绘图
-ggplot(
- df_long,
- aes(x = x, next_x = next_x, node = node, next_node = next_node,
- value = value, fill = node)
-) +
- geom_sankey(flow.alpha = 0.7, node.color = "grey30", width = 0.5) + 
- geom_sankey_label(aes(label = node), size = 3, col = "black", fill = "white", alpha = 0.7, text.color = "black") +
- scale_fill_manual(values = cat_colors, name = NULL) +
- labs(x = NULL, y = "sum(coding_n)") +
- ggsankey::theme_sankey(base_size = 12) +
- theme(
- legend.position = "none",
- plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
- )
+# 修改标签为首字母大写
+df_long_capitalized <- df_long %>%
+  mutate(
+    # 将 node 和 next_node 的标签改为首字母大写
+    node = tools::toTitleCase(as.character(node)),
+    next_node = tools::toTitleCase(as.character(next_node)),
+    # 重新设置为因子，保持原有的排序
+    node = factor(node, levels = tools::toTitleCase(levels(df_long$node))),
+    next_node = factor(next_node, levels = tools::toTitleCase(levels(df_long$next_node)))
+  )
 
-
-
-
-
-# 手动指定节点和箭头颜色。
-cat_colors <- c(
- # 主题颜色。
- "environment" = "#1b9e77",
- "pollution" = "#d73027",
- "brand" = "#756bb1",
- "act" = "#08519c",
- 
- # ==== eco 子类 ====
- "animal" = "#33a02c",
- "plant" = "#66c2a5",
- "ecosystem" = "#b2df8a",
- 
- # ==== pollution 子类 ====
- "light" = "#fc8d59",
- "noise" = "#ef6548",
- "waste" = "#d7301f",
- "air" = "#f46d43",
- "water" = "#fee090",
- 
- # ==== brand 子类 ====
- "company" = "#9e9ac8",
- "cai" = "#6a51a3",
- 
- # ==== act 子类 ====
- "accountability" = "#3182bd",
- "remedy" = "#6baed6",
- "boycott" = "#9ecae1"
+# 同时需要更新颜色映射表中的键名为首字母大写
+cat_colors_capitalized <- setNames(
+  cat_colors,
+  tools::toTitleCase(names(cat_colors))
 )
+
+# 绘制桑基图
+plt_sankey <- ggplot(
+  df_long_capitalized,
+  aes(x = x, next_x = next_x, node = node, next_node = next_node,
+      value = value, fill = node)
+) +
+  geom_sankey(flow.alpha = 0.7, node.color = "grey30", width = 0.3, node.size = 0.1) + 
+  geom_sankey_label(aes(label = node), size = 6, col = NA, fill = "white", alpha = 0.7, text.color = "black") +
+  scale_fill_manual(values = cat_colors_capitalized, name = NULL) +
+  labs(x = NULL, y = NULL) +
+  ggsankey::theme_sankey(base_size = 20) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14, hjust = 0.5),
+    # 去掉底部的 x 轴标签（"cat" 和 "cat_sub"）
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+ggsave("data_proc/sankey_plot.png", plot = plt_sankey, width = 5, height = 5, dpi = 300)
+
+
+
+
+
 
 
 
