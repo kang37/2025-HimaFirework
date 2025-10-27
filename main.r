@@ -2,7 +2,8 @@
 pacman::p_load(
   quanteda, quanteda.textstats, quanteda.textplots, quanteda.textmodels, 
   dplyr, ggplot2, tidyr, stringr, openxlsx, lubridate, readr, purrr, tibble, 
-  showtext, rlang, LSX, patchwork, quantmod, Hmisc, reshape2, TTR, ggsankey
+  showtext, rlang, LSX, patchwork, quantmod, Hmisc, reshape2, TTR, ggsankey, 
+  treemapify
 )
 showtext_auto()
 
@@ -587,6 +588,85 @@ topfeatures(dfmat_ch, 30) %>%
   geom_col(aes(term, freq)) + 
   coord_flip() + 
   theme_bw()
+
+## Frequent word treemap ----
+# 最推荐的方案
+freq_data <- topfeatures(dfmat_ch, 20) %>% 
+  as.data.frame() %>% 
+  rename_with(~ "freq") %>% 
+  rownames_to_column(var = "term") %>% 
+  mutate(
+    percentage = round(freq / sum(freq) * 100, 1) %>% sprintf("%.0f", .),
+    label_text = paste0(term, "\n", percentage, "%")
+  )
+
+alternating_colors <- c(
+  "#fdae6b", "#a1d99b", "#fdd0a2", "#a8ddb5", "#ffa366",
+  "#a8ddb5", "#fed976", "#a8ddb5", "#ffcc99", "#b2dfdb",
+  "#ffc299", "#bae4bc", "#ffb380", "#c2e699", "#ffa366",
+  "#d4eac7", "#ff944d", "#92c5de", "#ffad85", "#a6d4b8"
+)
+
+png("data_proc/treemap_top_terms.png", width = 1200, height = 1000, res = 300)
+ggplot(freq_data, aes(area = freq, fill = term, label = label_text)) +
+  geom_treemap(color = "white", size = 2) +
+  geom_treemap_text(
+    color = "white",
+    place = "centre",
+    size = 15,
+    fontface = "bold"
+  ) +
+  scale_fill_manual(values = alternating_colors) +
+  theme(legend.position = "none")
+dev.off()
+
+# 英文版本。
+# 中英文对照表
+translation_map <- c(
+  "蔡国强" = "Cai Guoqiang",
+  "烟花" = "Fireworks",
+  "艺术" = "Art",
+  "始祖鸟" = "Arc'teryx",
+  "秀" = "Show",
+  "生态" = "Ecology",
+  "品牌" = "Brand",
+  "喜马拉雅" = "Himalaya",
+  "现场" = "Live",
+  "垃圾" = "Waste",
+  "自然" = "Nature",
+  "微博" = "Weibo",
+  "环境" = "Environment",
+  "高原" = "Plateau",
+  "视频" = "Video",
+  "破坏" = "Damage",
+  "场" = "Site",
+  "家" = "Home",
+  "环保" = "Environmental\nProtection",
+  "中" = "In/Among"
+)
+
+freq_data_en <- freq_data %>%
+  select(term, freq) %>%
+  mutate(
+    term = translation_map[term],
+    percentage = round(freq / sum(freq) * 100) %>% sprintf("%.0f", .),
+    label_text = paste0(term, "\n", percentage, "%")
+  )
+
+# 创建树状图
+png("data_proc/treemap_top_terms_english.png", width = 1200, height = 1000, res = 300)
+ggplot(freq_data_en, aes(area = freq, fill = term, label = label_text)) +
+  geom_treemap(color = "white", size = 2) +
+  geom_treemap_text(
+    color = "white",
+    place = "centre",
+    size = 15,
+    fontface = "bold"
+  ) +
+  scale_fill_manual(values = alternating_colors) +
+  theme(legend.position = "none")
+dev.off()
+
 
 # 分主题绘制高频词汇图。
 # 定义一个函数：给定主题名 -> 输出高频词图
