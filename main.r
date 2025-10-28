@@ -94,8 +94,7 @@ data <- lapply(
 
 # 安踏股价。
 anta_stock <- 
-  tidyquant::tq_get("2020.HK", from = "2025-09-15", to = "2025-10-04") %>%
-  filter(date >= "2025-09-19")
+  tidyquant::tq_get("2020.HK", from = "2025-09-15", to = "2025-10-04")
 
 # 谷歌趋势：“蔡国强”、“始祖鸟”、“安踏”、“喜马拉雅”的谷歌趋势。
 goo_trend <- lapply(
@@ -141,7 +140,8 @@ all_dt_num_smry <-
     prev_stock = lag(prev_stock),
     stock_change = adj_stock - prev_stock
   ) %>%
-  select(-valid_stock, -prev_stock)
+  select(-valid_stock, -prev_stock) %>% 
+  filter(post_date >= "2025-09-19")
 
 # 各数据趋势。
 png("data_proc/time_series_weibo_google_stock.png", 
@@ -212,32 +212,58 @@ png("data_proc/time_series_weibo_google_stock.png",
     )
 ) / (
   # 绘制K线图，包含5日均线。
-  ggplot(anta_stock, aes(x = date)) +
-    geom_segment(
-      aes(y = low, yend = high, xend = date, color = close > open)
-    ) +
-    geom_rect(
-      aes(
-        xmin = date - 0.3, xmax = date + 0.3,
-        ymin = pmin(open, close), ymax = pmax(open, close),
-        fill = close > open
-      ),
-      color = NA, 
-      linewidth = 0.1
-    ) +
-    scale_fill_manual(
-      values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
-    ) + 
-    scale_color_manual(
-      values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
-    ) + 
-    labs(x = "Date", y = "Stock price (HKD)") +
-    scale_x_date(
-      limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-      breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
-      labels = c("9-19", "9-21", "09-26", "10-04")
-    ) + 
-    theme_bw() 
+  (
+    ggplot(anta_stock %>% filter(date >= "2025-09-19"), aes(x = date)) +
+      geom_segment(
+        aes(y = low, yend = high, xend = date, color = close > open)
+      ) +
+      geom_rect(
+        aes(
+          xmin = date - 0.3, xmax = date + 0.3,
+          ymin = pmin(open, close), ymax = pmax(open, close),
+          fill = close > open
+        ),
+        color = NA, 
+        linewidth = 0.1
+      ) +
+      scale_fill_manual(
+        values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
+      ) + 
+      scale_color_manual(
+        values = c("TRUE" = "#E74C3C", "FALSE" = "green"), guide = "none"
+      ) + 
+      labs(x = NULL, y = "Stock price\n(HKD)") +
+      scale_x_date(
+        limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
+        breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
+        labels = NULL
+      ) + 
+      theme_bw() +
+      theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.margin = margin(5, 5, 0, 5), 
+        panel.grid.minor = element_blank()
+      )
+  ) / (
+    ggplot(all_dt_num_smry) + 
+      geom_col(aes(post_date, stock_change, fill = stock_change > 0)) + 
+      scale_fill_manual(
+        values = c("TRUE" = "#E74C3C", "FALSE" = "green"),  # 大于0红色，否则绿色
+        guide = "none"  # 不显示图例
+      ) +
+      scale_x_date(
+        limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
+        breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
+        labels = c("9-19", "9-21", "09-26", "10-04")
+      ) +
+      labs(x = "Date", y = "Stock\nChange") +
+      theme_bw() +
+      theme(
+        plot.margin = margin(0, 5, 5, 5), 
+        panel.grid.minor = element_blank()
+      )
+  )
 )
 dev.off()
 
