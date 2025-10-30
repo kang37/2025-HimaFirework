@@ -191,7 +191,7 @@ plot_single_area <- function(data_subset, category_name, valid_dates, all_dates,
                 fill = "grey50", alpha = 0.3, inherit.aes = FALSE)
     }} +
     # 非堆叠面积图和线条
-    geom_line(aes(color = !!fill_var), size = 1) +
+    geom_line(aes(color = !!fill_var), size = 1.5) +
     geom_point(aes(color = !!fill_var), size = 2) +  # 添加点的大小
     # 设置颜色（使用首字母大写版本）
     scale_fill_manual(values = cat_colors_capitalized) +
@@ -212,9 +212,9 @@ plot_single_area <- function(data_subset, category_name, valid_dates, all_dates,
       legend.title = element_blank(),
       legend.margin = margin(l = 5),
       legend.key.size = unit(0.8, "cm"),  # 图例方块大小
-      legend.text = element_text(size = 20),  # 增大图例文字
-      axis.title = element_text(size = 20),  # 增大轴标题
-      axis.text = element_text(size = 20),   # 增大轴文字
+      legend.text = element_text(size = 25),  # 增大图例文字
+      axis.title = element_text(size = 25),  # 增大轴标题
+      axis.text = element_text(size = 25),   # 增大轴文字
       plot.margin = margin(0.3, 0.3, 0.3, 0.3, "cm")
     ) +
     # 使用 guide_legend 进一步控制图例
@@ -232,14 +232,14 @@ plot_single_area <- function(data_subset, category_name, valid_dates, all_dates,
     )
   } else {
     p <- p + labs(x = "Date") +  # 简化标签
-      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 16))  # 减小字号以适应更多日期
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 16))  # 减小字号以适应更多日期
   }
   
   return(p)
 }
 
-# 筛选数据：只保留 day_tot_mention >= 50 的日期
-filtered_data <- coding_smry %>% filter(day_tot_mention >= 50)
+# Bug: 筛选数据：只保留 day_tot_mention >= 50 的日期
+filtered_data <- coding_smry %>% filter(day_tot_mention >= 30)
 
 # 获取所有符合条件的有效日期（已经过滤了 day_tot_mention < 50 的日期）
 valid_dates <- filtered_data %>%
@@ -269,9 +269,9 @@ for (i in seq_along(categories)) {
 coding_smry %>% 
   group_by(cat) %>% 
   summarise(cat_mention = sum(day_catsub_mention), .groups = "drop") %>% 
-  mutate(
-    cat_to_tot = round(cat_mention / sum(cat_mention) * 100, digits = 2)
-  )
+  mutate(cat_to_tot = sprintf(
+    "%.2f", round(cat_mention / sum(cat_mention) * 100, digits = 2)
+  ))
 # 各子主题提及占相应主题，以及占总提及数的百分比。
 coding_smry %>% 
   group_by(cat, cat_sub) %>% 
@@ -288,3 +288,4 @@ coding_smry %>%
     catsub_to_tot = round(cat_sub_mention / sum(cat_sub_mention) * 100, digits = 2)
   ) %>% 
   write.xlsx("data_proc/coding_subcategory_summary.xlsx")
+
