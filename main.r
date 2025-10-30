@@ -311,6 +311,7 @@ get_cor <- function(df_x) {
 get_cor(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward))
 
 ## Cor plot for paper ----
+## Cor plot for paper ----
 get_cor_circle_styled <- function(df_x, label_map = NULL, 
                                   var_order = NULL,      # 新增：自定义变量顺序
                                   white_density = 0.1,   # 白点间隔（值越大越稀疏）
@@ -485,7 +486,6 @@ variable_order <- c(
   "Stock Change"
 )
 
-# 方案1: 显示下三角（推荐）
 png("data_proc/correlation_circle_lower.png", width = 1600, height = 1200, res = 300)
 get_cor_circle_styled(
   all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward), 
