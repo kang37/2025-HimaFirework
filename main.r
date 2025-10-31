@@ -311,12 +311,42 @@ get_cor <- function(df_x) {
 get_cor(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward))
 
 ## Cor plot for paper ----
-## Cor plot for paper ----
+generate_expanded_grid <- function(x_values, y_values, 
+                                   offset = 0.4, 
+                                   density = 0.1) {
+  #' 根据X和Y数值生成扩展的网格数据框
+  #' 
+  #' @param x_values 数值向量，例如 c(1, 2, 3, 4, 5, 6)
+  #' @param y_values 数值向量，例如 c(1, 6, 7)
+  #' @param offset 从中心点向外扩展的距离，默认0.4
+  #' @param density 网格密度（点之间的间距），默认0.1
+  #' @return data.frame 包含x和y坐标的扩展网格
+  
+  # 创建所有X和Y的组合
+  combinations <- expand.grid(
+    x_center = x_values,
+    y_center = y_values
+  )
+  
+  # 对每个组合生成扩展的网格
+  result <- combinations %>%
+    rowwise() %>%
+    do({
+      expand.grid(
+        x = seq(.$x_center - offset, .$x_center + offset, by = density),
+        y = seq(.$y_center - offset, .$y_center + offset, by = density)
+      )
+    }) %>%
+    ungroup()
+  
+  return(result)
+}
+# 函数：做相关性图。
 get_cor_circle_styled <- function(df_x, label_map = NULL, 
                                   var_order = NULL,      # 新增：自定义变量顺序
                                   white_density = 0.1,   # 白点间隔（值越大越稀疏）
                                   white_size = 0.1,      # 白点大小
-                                  white_alpha = 0.8) {
+                                  white_alpha = 0.8, non_sig_data) {
   # 去掉日期列，只保留数值列
   num_df <- df_x %>%
     select(-post_date)
@@ -367,14 +397,14 @@ get_cor_circle_styled <- function(df_x, label_map = NULL,
     merged <- merged %>%
       mutate(
         Var1_label = factor(Var1_label, levels = var_order),
-        Var2_label = factor(Var2_label, levels = var_order)
+        Var2_label = factor(Var2_label, levels = rev(var_order))
       )
   } else {
     var_order_default <- unique(merged$Var1_label)
     merged <- merged %>%
       mutate(
         Var1_label = factor(Var1_label, levels = var_order_default),
-        Var2_label = factor(Var2_label, levels = var_order_default)
+        Var2_label = factor(Var2_label, levels = rev(var_order_default))
       )
   }
   
@@ -383,27 +413,12 @@ get_cor_circle_styled <- function(df_x, label_map = NULL,
     mutate(
       x_idx = as.numeric(Var1_label),
       y_idx = as.numeric(Var2_label)
-    )
+    ) %>% 
+    mutate(y_idx = max(y_idx) - y_idx + 1)  # 反转y轴索引
   
   # 只保留指定的三角部分
   merged <- merged %>% filter(x_idx < y_idx) %>% 
     filter(Var1 != Var2)
-  
-  # 创建白色覆盖层的网格点（用于不显著区域）
-  non_sig_data <- merged %>% 
-    filter(!significant) %>% 
-    group_by(Var1_label, Var2_label) %>%
-    do({
-      x_idx <- as.numeric(.$Var1_label)
-      y_idx <- as.numeric(.$Var2_label)
-      expand.grid(
-        x = seq(x_idx - 0.4, x_idx + 0.4, by = white_density),
-        y = seq(y_idx - 0.4, y_idx + 0.4, by = white_density)
-      )
-    }) %>%
-    ungroup() %>% 
-    # Bug: 根据结果检查该设置是否正确。
-    mutate(y = y - 1)
   
   # 绘图
   p <- ggplot(merged, aes(x = Var1_label, y = Var2_label)) +
@@ -493,7 +508,11 @@ get_cor_circle_styled(
   var_order = variable_order,
   white_density = 0.1,
   white_size = 0.2,
-  white_alpha = 0.7
+  white_alpha = 0.7, 
+  non_sig_data = rbind(
+    generate_expanded_grid(1, 1:7), 
+    generate_expanded_grid(6:7, 1)
+  ) 
 )
 dev.off()
 
