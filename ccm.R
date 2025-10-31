@@ -9,11 +9,18 @@ library(rEDM)
 library(tidyquant)
 library(tidyr)
 library(gridExtra)
+library(zoo)  # 用于na.locf()函数
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("   安踏调整股价 vs 谷歌趋势 - 完整CCM因果分析\n")
+cat("   包含：因果方向 + 因果性质 + 因果强度\n")
+cat(rep("=", 80), "\n\n", sep = "")
 
 # ============================================================================
 # 1. 数据准备
 # ============================================================================
 
+cat("=== 步骤1: 数据读取 ===\n")
 
 # 1.1 读取谷歌趋势数据
 google_trends <- read.csv("data_raw/anta_cn_long.csv", skip = 2) %>%
@@ -27,7 +34,13 @@ google_trends <- read.csv("data_raw/anta_cn_long.csv", skip = 2) %>%
   ) %>%
   filter(!is.na(google_trend))
 
+cat("✓ 谷歌趋势数据：", nrow(google_trends), "个数据点\n")
+cat("  日期范围：", as.character(min(google_trends$date)), "至", 
+    as.character(max(google_trends$date)), "\n")
+
 # 1.2 读取真实股价数据
+cat("\n正在获取安踏真实股价数据（2020.HK）...\n")
+
 stock_data_raw <- tidyquant::tq_get(
   "2020.HK", 
   from = min(google_trends$date),
@@ -38,15 +51,48 @@ stock_data <- stock_data_raw %>%
   select(date, adj_close = adjusted) %>%
   arrange(date)
 
-# 1.3 合并数据
-anta_data <- google_trends %>%
-  inner_join(stock_data, by = "date") %>%
-  arrange(date) %>%
+cat("✓ 股价数据：", nrow(stock_data), "个数据点\n")
+cat("  日期范围：", as.character(min(stock_data$date)), "至", 
+    as.character(max(stock_data$date)), "\n")
+cat("  价格范围：", round(min(stock_data$adj_close), 2), "至", 
+    round(max(stock_data$adj_close), 2), "HKD\n")
+
+# 1.3 合并数据并补全周末/节假日股价
+cat("\n正在处理周末和节假日数据...\n")
+
+# 先用left_join保留所有谷歌趋势的日期
+anta_data_raw <- google_trends %>%
+  left_join(stock_data, by = "date") %>%
+  arrange(date)
+
+# 向前填充股价（使用前一个交易日的价格）
+anta_data <- anta_data_raw %>%
   mutate(
-    # 计算股价变化量
-    stock_change = adj_close - lag(adj_close)
+    # 使用tidyr::fill向前填充NA值
+    adj_close = zoo::na.locf(adj_close, na.rm = FALSE)
   ) %>%
-  filter(!is.na(stock_change))  # 去掉第一个NA
+  # 移除开始的NA（如果第一天没有股价数据）
+  filter(!is.na(adj_close)) %>%
+  mutate(
+    # 计算股价变化量（相对于上一个日期，不管是否交易日）
+    stock_change = adj_close - lag(adj_close),
+    # 标记是否为交易日
+    is_trading_day = date %in% stock_data$date
+  ) %>%
+  filter(!is.na(stock_change))
+
+cat("✓ 数据补全完成\n")
+cat("  总数据点数:", nrow(anta_data), "\n")
+cat("  其中交易日:", sum(anta_data$is_trading_day), "\n")
+cat("  非交易日:", sum(!anta_data$is_trading_day), "\n")
+cat("  非交易日占比:", round(100 * sum(!anta_data$is_trading_day) / nrow(anta_data), 1), "%\n")
+
+cat("\n✓ 合并后数据：", nrow(anta_data), "个数据点\n")
+cat("  最终日期范围：", as.character(min(anta_data$date)), "至", 
+    as.character(max(anta_data$date)), "\n")
+cat("  股价变化量范围：", round(min(anta_data$stock_change), 2), "至", 
+    round(max(anta_data$stock_change), 2), "\n")
+cat("  股价变化量NA数量：", sum(is.na(anta_data$stock_change)), "\n\n")
 
 # ============================================================================
 # 2. 数据去趋势和标准化
@@ -84,6 +130,16 @@ anta_data_processed <- anta_data %>%
   ) %>%
   # 移除任何包含NA的行
   filter(!is.na(stock_norm), !is.na(trend_norm), !is.na(change_norm))
+
+cat("✓ 去趋势和标准化完成\n")
+cat("  处理后数据点数:", nrow(anta_data_processed), "\n")
+cat("\n统计摘要：\n")
+cat("  股价水平   - 均值:", round(mean(anta_data_processed$stock_norm), 3), 
+    "标准差:", round(sd(anta_data_processed$stock_norm), 3), "\n")
+cat("  谷歌趋势   - 均值:", round(mean(anta_data_processed$trend_norm), 3), 
+    "标准差:", round(sd(anta_data_processed$trend_norm), 3), "\n")
+cat("  股价变化量 - 均值:", round(mean(anta_data_processed$change_norm), 3), 
+    "标准差:", round(sd(anta_data_processed$change_norm), 3), "\n\n")
 
 # ============================================================================
 # 3. 确定最优嵌入维度E
@@ -128,7 +184,7 @@ E_change <- EmbedDimension(
   maxE = 4,
   columns = "change",
   target = "change",
-  showPlot = FALSE
+  showPlot = T
 )
 
 best_E_stock <- E_stock$E[which.max(E_stock$rho)]
@@ -136,9 +192,16 @@ best_E_trend <- E_trend$E[which.max(E_trend$rho)]
 best_E_change <- E_change$E[which.max(E_change$rho)]
 best_E <- round(mean(c(best_E_stock, best_E_trend, best_E_change)))
 
+cat("  股价水平最优E:", best_E_stock, "\n")
+cat("  谷歌趋势最优E:", best_E_trend, "\n")
+cat("  股价变化最优E:", best_E_change, "\n")
+cat("  使用平均E:", best_E, "\n\n")
+
 # ============================================================================
 # 4. 多Tp CCM分析
 # ============================================================================
+
+cat("=== 步骤4: 多滞后期CCM分析 ===\n")
 
 tp_values <- c(0, 1, 2, 3)
 
@@ -158,7 +221,7 @@ ccm_data_change <- data.frame(
 )
 
 max_lib <- nrow(ccm_data_level) - best_E - max(tp_values)
-lib_sizes_str <- sprintf("10 %d 2", max_lib)
+lib_sizes_str <- sprintf("10 %d 3", max_lib)
 
 # 运行CCM分析
 ccm_results_all <- list()
@@ -340,12 +403,6 @@ final_summary <- ccm_summary %>%
   )
 
 cat("✓ 结果整理完成\n\n")
-
-# ============================================================================
-# 7. 可视化：为每个Tp生成CCM图和散点图
-# ============================================================================
-
-cat("=== 步骤7: 生成可视化图表 ===\n\n")
 
 ggplot(ccm_all_data %>% filter(!is.na(`stock:trend`))) + 
   geom_line(aes(LibSize, `stock:trend`), col = "red") + 
