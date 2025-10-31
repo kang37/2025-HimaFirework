@@ -23,11 +23,8 @@ cat(rep("=", 80), "\n\n", sep = "")
 cat("=== 步骤1: 数据读取 ===\n")
 
 # 1.1 读取谷歌趋势数据
-google_trends <- read.csv("data_raw/anta_cn_long.csv", skip = 2) %>%
-  rename(
-    date = Day,
-    google_trend = 安踏...Worldwide.
-  ) %>%
+google_trends <- read.csv("data_raw/himalaya_cn_long.csv", skip = 2) %>%
+  rename_with(~ c("date", "google_trend")) %>% 
   mutate(
     date = as.Date(date),
     google_trend = as.numeric(google_trend)
@@ -239,7 +236,8 @@ for (tp in tp_values) {
     libSizes = lib_sizes_str,
     sample = 100,
     random = TRUE,
-    seed = 123 + tp
+    seed = 123 + tp, 
+    showPlot = T
   )
   
   # 股价变化量
