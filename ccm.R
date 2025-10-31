@@ -345,7 +345,13 @@ ccm_all_data <- bind_rows(ccm_results_all)
 ccm_summary <- ccm_all_data %>%
   group_by(Tp, Type, Target) %>%
   slice_max(LibSize, n = 1) %>%
-  ungroup()
+  ungroup() %>% 
+  pivot_longer(cols = contains("trend"),
+               names_to = "direction",
+               values_to = "rho") %>% 
+  filter(!is.na(rho)) %>%
+  separate_wider_delim(cols = direction, names = c("To", "From"), delim = ":", cols_remove = F) %>% 
+  select(Tp, Type, From, To, rho)
 
 # 为每种类型提取正确的rho列
 ccm_summary <- ccm_summary %>%
@@ -375,7 +381,6 @@ correlation_summary <- bind_rows(lapply(correlation_results, function(x) {
 
 # 合并CCM和相关性
 final_summary <- ccm_summary %>%
-  select(Tp, Type, Target, LibSize, ccm_rho) %>%
   left_join(correlation_summary, by = c("Tp", "Type")) %>%
   mutate(
     # 因果方向
@@ -390,14 +395,14 @@ final_summary <- ccm_summary %>%
     
     # 因果强度
     causality_strength = case_when(
-      ccm_rho >= 0.5 ~ "强",
-      ccm_rho >= 0.3 ~ "中等",
-      ccm_rho >= 0.2 ~ "弱",
+      rho >= 0.5 ~ "强",
+      rho >= 0.3 ~ "中等",
+      rho >= 0.2 ~ "弱",
       TRUE ~ "极弱"
     ),
     
     # 是否显著
-    ccm_significant = ccm_rho >= 0.3,
+    ccm_significant = rho >= 0.3,
     cor_significant = correlation_p < 0.05,
     overall_significant = ccm_significant & cor_significant
   )
@@ -417,3 +422,21 @@ ggplot(ccm_all_data %>% filter(!is.na(`change:trend`))) +
   geom_line(aes(LibSize, `trend:change`), col = "blue") + 
   geom_point(aes(LibSize, `trend:change`)) + 
   facet_wrap(.~ Tp)
+
+(
+  ggplot(final_summary) + 
+    geom_tile(aes(x = factor(Tp), y = Type, fill = causality_nature), color = "white") + 
+    facet_grid(. ~ causality_direction) + 
+    theme(legend.position = "bottom")
+) | (
+  ggplot(final_summary) + 
+    geom_tile(aes(x = factor(Tp), y = Type, fill = ccm_significant), color = "white") + 
+    facet_grid(. ~ causality_direction) + 
+    theme(legend.position = "bottom")
+) | (
+  ggplot(final_summary) + 
+    geom_tile(aes(x = factor(Tp), y = Type, fill = cor_significant), color = "white") + 
+    facet_grid(. ~ causality_direction) + 
+    theme(legend.position = "bottom")
+)
+
