@@ -31,57 +31,23 @@ stock_data <- tidyquant::tq_get(
 # 1.3 合并数据并补全周末/节假日股价
 
 # 先用left_join保留所有谷歌趋势的日期
-# anta_data <- google_trends %>%
-#   left_join(stock_data, by = "date") %>%
-#   arrange(date) %>% 
-#   # 向前填充股价（使用前一个交易日的价格）
-#   mutate(
-#     # 使用tidyr::fill向前填充NA值
-#     adj_close = zoo::na.locf(adj_close, na.rm = FALSE)
-#   ) %>%
-#   # 移除开始的NA（如果第一天没有股价数据）
-#   filter(!is.na(adj_close)) %>%
-#   mutate(
-#     # 计算股价变化量（相对于上一个日期，不管是否交易日）
-#     stock_change = adj_close - lag(adj_close),
-#     # 标记是否为交易日
-#     is_trading_day = date %in% stock_data$date
-#   ) %>%
-#   filter(!is.na(stock_change))
-
-# 使用另一种计算方法：对于非交易日时间段（比如周末）的前一个交易日（比如周五），将其谷歌趋势修改为该交易日和后面非交易日的谷歌趋势的平均值；然后删除非交易日数据行。
 anta_data <- google_trends %>%
   left_join(stock_data, by = "date") %>%
   arrange(date) %>%
-  # 标记是否为交易日
-  mutate(is_trading_day = date %in% stock_data$date) %>%
-  # 识别交易日区块：为每个交易日标记后续的非交易日数量
+  # 向前填充股价（使用前一个交易日的价格）
   mutate(
-    # 创建交易日组：每个交易日及其后续非交易日为一组
-    trading_group = cumsum(is_trading_day)
+    # 使用tidyr::fill向前填充NA值
+    adj_close = zoo::na.locf(adj_close, na.rm = FALSE)
   ) %>%
-  # 按交易日组计算谷歌趋势的平均值
-  group_by(trading_group) %>%
+  # 移除开始的NA（如果第一天没有股价数据）
+  filter(!is.na(adj_close)) %>%
   mutate(
-    google_trend_avg = mean(google_trend, na.rm = TRUE)
+    # 计算股价变化量（相对于上一个日期，不管是否交易日）
+    stock_change = adj_close - lag(adj_close),
+    # 标记是否为交易日
+    is_trading_day = date %in% stock_data$date
   ) %>%
-  ungroup() %>%
-  # 只保留交易日
-  filter(is_trading_day) %>%
-  # 用平均后的谷歌趋势替换原值
-  mutate(
-    google_trend = google_trend_avg,
-    # 使用交易日的股价
-    adj_close = adj_close
-  ) %>%
-  # 计算股价变化量
-  mutate(
-    stock_change = adj_close - lag(adj_close)
-  ) %>%
-  # 移除第一行的NA
-  filter(!is.na(stock_change)) %>%
-  # 清理不需要的列
-  select(-trading_group, -google_trend_avg)
+  filter(!is.na(stock_change))
 
 # ============================================================================
 # 2. 数据去趋势和标准化
@@ -344,4 +310,4 @@ for(tp in tp_values) {
     )
   })
 }
-bind_rows(smap_results)
+bind_rows(smap_results) %>% View()
