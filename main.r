@@ -513,8 +513,83 @@ get_cor_circle_styled(
     generate_expanded_grid(1, 1:7), 
     generate_expanded_grid(6:7, 1)
   ) 
-)
+) + 
+  theme(panel.border = element_blank(), axis.ticks = element_blank())
 dev.off()
+
+# Coding ----
+# 1) 你的关键词表保持不变
+coding_keywords <- list(
+  animal = c("动物","雪豹","鼠兔","牲畜","栖息地","物种","生灵","惊扰","迁徙","受惊"),
+  plant  = c("植被","植物","草","地衣","苔藓","真菌","草毡层","修复","绿化"),
+  ecosystem = c("生态", "脆弱","高原","冰川","山脉","自然", "不可逆"),
+  light = c("光污染","强光","光害"),
+  noise = c("噪声","噪音","声响","爆破声","惊扰","安静"),
+  waste = c("垃圾","残渣","遗留物","清理","杂物","废物"),
+  air   = c("空气污染","烟雾","大气","粉尘","PM2.5","颗粒物"),
+  water = c("水污染","水体","融水","雪水","河流"),
+  company = c("始祖鸟","安踏","品牌","广告"),
+  cai     = c("人设","虚伪","傲慢"),
+  accountability = c("调查","处罚","追责","立法","合规","审查","立案","判刑"),
+  remedy        = c("道歉","赔偿","修复","补救","清理","评估"),
+  boycott       = c("抵制","不买","下架","退货","转黑","卸载")
+)
+
+# 2) 子类 → 大类 的映射
+category_map <- c(
+  animal="生态危害", plant="生态危害", ecosystem="生态危害",
+  light="污染信息", noise="污染信息", waste="污染信息", air="污染信息", water="污染信息",
+  company="品牌/商业", cai="品牌/商业",
+  accountability="诉求/行动", remedy="诉求/行动", boycott="诉求/行动"
+)
+
+# 3) 关键词检测函数（更稳健：转小写对中文无影响；转义正则特殊字符）
+detect_keywords <- function(text, keywords){
+  kw <- str_replace_all(keywords, "([\\^$.|?*+()\\[\\]{}\\\\])", "\\\\\\1")
+  pattern <- str_c(kw, collapse="|")
+  as.integer(str_detect(text, pattern))
+}
+
+# 4) 生成各子类 0/1 列
+coding_results_df <- map_dfc(coding_keywords, ~ detect_keywords(data$content, .x))
+
+data_coding <- data %>% 
+  bind_cols(coding_results_df)
+
+# 编码主题分类。
+coding_cat <- rbind(
+  data.frame(cat = "environment", cat_sub = c("animal", "plant", "ecosystem")), 
+  data.frame(
+    cat = "pollution", cat_sub = c("light", "noise", "waste", "air", "water")
+  ), 
+  data.frame(cat = "brand", cat_sub = c("company", "cai")),
+  data.frame(cat = "act", cat_sub = c("accountability", "remedy", "boycott"))
+)
+
+# 汇总编码结果。
+coding_smry <- data_coding %>% 
+  pivot_longer(
+    cols = coding_cat$cat_sub, names_to = "cat_sub", values_to = "mention"
+  ) %>% 
+  left_join(coding_cat, by = "cat_sub") %>% 
+  # 计算各天总提及数量。
+  group_by(post_date) %>% 
+  mutate(day_tot_mention = sum(mention)) %>% 
+  ungroup() %>% 
+  # 计算每天各主题提及数量。
+  group_by(post_date, cat) %>% 
+  mutate(day_cat_mention = sum(mention)) %>% 
+  ungroup() %>% 
+  # 计算各天子各主题的提及数量，并计算它们在一天内各主题的比例。
+  group_by(post_date, cat, cat_sub, day_tot_mention, day_cat_mention) %>% 
+  summarise(day_catsub_mention = sum(mention), .groups = "drop") %>% 
+  mutate(mention_prop = day_catsub_mention / day_cat_mention) %>% 
+  filter(mention_prop != 0)
+
+# 作图。
+ggplot(coding_smry) + 
+  geom_col(aes(post_date, mention_prop, fill = cat_sub)) + 
+  facet_grid(.~ cat)
 
 # Text mining ----
 # 将评论文本列 (comment_text) 转换为quanteda语料库。
@@ -745,122 +820,4 @@ tstat_col_ch <- textstat_collocations(toks_ch_split_tag, size = 2, min_count = 2
 knitr::kable(head(tstat_col_ch, 10))
 tstat_col_ch <- textstat_collocations(toks_ch_split_tag, size = 3, min_count = 20)
 knitr::kable(head(tstat_col_ch, 10))
-
-# Topic ----
-# 主题模型
-# 大约花1-2分钟
-# library(stm)
-# my_lda_fit20 <- stm(dfmat_ch, K = 10, verbose = FALSE)
-# plot(my_lda_fit20)  
-
-# Coding ----
-# 1) 你的关键词表保持不变
-coding_keywords <- list(
-  animal = c("动物","雪豹","鼠兔","牲畜","栖息地","物种","生灵","惊扰","迁徙","受惊"),
-  plant  = c("植被","植物","草","地衣","苔藓","真菌","草毡层","修复","绿化"),
-  ecosystem = c("生态", "脆弱","高原","冰川","山脉","自然", "不可逆"),
-  light = c("光污染","强光","光害"),
-  noise = c("噪声","噪音","声响","爆破声","惊扰","安静"),
-  waste = c("垃圾","残渣","遗留物","清理","杂物","废物"),
-  air   = c("空气污染","烟雾","大气","粉尘","PM2.5","颗粒物"),
-  water = c("水污染","水体","融水","雪水","河流"),
-  company = c("始祖鸟","安踏","品牌","广告"),
-  cai     = c("人设","虚伪","傲慢"),
-  accountability = c("调查","处罚","追责","立法","合规","审查","立案","判刑"),
-  remedy        = c("道歉","赔偿","修复","补救","清理","评估"),
-  boycott       = c("抵制","不买","下架","退货","转黑","卸载")
-)
-
-# 2) 子类 → 大类 的映射
-category_map <- c(
-  animal="生态危害", plant="生态危害", ecosystem="生态危害",
-  light="污染信息", noise="污染信息", waste="污染信息", air="污染信息", water="污染信息",
-  company="品牌/商业", cai="品牌/商业",
-  accountability="诉求/行动", remedy="诉求/行动", boycott="诉求/行动"
-)
-
-# 3) 关键词检测函数（更稳健：转小写对中文无影响；转义正则特殊字符）
-detect_keywords <- function(text, keywords){
-  kw <- str_replace_all(keywords, "([\\^$.|?*+()\\[\\]{}\\\\])", "\\\\\\1")
-  pattern <- str_c(kw, collapse="|")
-  as.integer(str_detect(text, pattern))
-}
-
-# 4) 生成各子类 0/1 列
-coding_results_df <- map_dfc(coding_keywords, ~ detect_keywords(data$content, .x))
-
-data_coding <- data %>% 
-  bind_cols(coding_results_df)
-
-# 编码主题分类。
-coding_cat <- rbind(
-  data.frame(cat = "environment", cat_sub = c("animal", "plant", "ecosystem")), 
-  data.frame(
-    cat = "pollution", cat_sub = c("light", "noise", "waste", "air", "water")
-  ), 
-  data.frame(cat = "brand", cat_sub = c("company", "cai")),
-  data.frame(cat = "act", cat_sub = c("accountability", "remedy", "boycott"))
-)
-
-# 汇总编码结果。
-coding_smry <- data_coding %>% 
-  pivot_longer(
-    cols = coding_cat$cat_sub, names_to = "cat_sub", values_to = "mention"
-  ) %>% 
-  left_join(coding_cat, by = "cat_sub") %>% 
-  # 计算各天总提及数量。
-  group_by(post_date) %>% 
-  mutate(day_tot_mention = sum(mention)) %>% 
-  ungroup() %>% 
-  # 计算每天各主题提及数量。
-  group_by(post_date, cat) %>% 
-  mutate(day_cat_mention = sum(mention)) %>% 
-  ungroup() %>% 
-  # 计算各天子各主题的提及数量，并计算它们在一天内各主题的比例。
-  group_by(post_date, cat, cat_sub, day_tot_mention, day_cat_mention) %>% 
-  summarise(day_catsub_mention = sum(mention), .groups = "drop") %>% 
-  mutate(mention_prop = day_catsub_mention / day_cat_mention) %>% 
-  filter(mention_prop != 0)
-
-# 作图。
-ggplot() + 
-  geom_col(aes(post_date, mention_prop, fill = cat_sub)) + 
-  facet_grid(.~ cat)
-
-
-# 3️⃣ 加权比例函数：跳过发帖数 < 50 的日期
-get_coding_day_prop_weighted <- function(coding_col_name) {
-  data_coding %>%
-    group_by(post_date) %>%
-    summarise(
-      day_n           = n(),
-      weighted_coding = sum(weight_score * .data[[coding_col_name]], na.rm = TRUE),
-      total_weight    = sum(weight_score, na.rm = TRUE),
-      prop_raw        = weighted_coding / total_weight,
-      .groups = "drop"
-    ) %>%
-    mutate(
-      prop = ifelse(day_n >= 20, prop_raw, NA_real_),  # 小于50条则设为 NA
-      coding_col = coding_col_name,
-      .before = 1
-    ) %>%
-    select(-prop_raw)  # 可选，去掉中间列
-}
-
-# 4️⃣ 批量计算所有主题
-coding_smry_weighted <- map_df(names(coding_keywords), get_coding_day_prop_weighted) %>%
-  mutate(cat = recode(coding_col, !!!category_map))
-
-# 5️⃣ 可视化
-ggplot(coding_smry_weighted) +
-  geom_area(aes(post_date, prop, fill = coding_col), position = "dodge", alpha = 0.5) +
-  facet_wrap(~cat) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(
-    x = "日期",
-    y = "加权占比（考虑传播量，仅≥50条日样本）",
-    fill = "主题"
-  ) +
-  lims(x = c(as_date("2025-09-19"), as_date("2025-10-04"))) + 
-  theme_minimal(base_size = 12)
 
