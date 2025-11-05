@@ -196,7 +196,11 @@ plot_single_area <- function(data_subset, category_name, valid_dates, all_dates,
     # 设置颜色（使用首字母大写版本）
     scale_fill_manual(values = cat_colors_capitalized) +
     scale_color_manual(values = cat_colors_capitalized) +
-    labs(x = NULL, y = "Mention proportion") +  # 删除 title
+    # 添加分面标签作为标题
+    labs(
+      x = "Date", 
+      y = "Mention\nproportion"
+    ) +
     # X轴范围设置为完整日期范围，显示每一天
     scale_x_date(
       limits = c(min(all_dates), max(all_dates)),
@@ -204,44 +208,40 @@ plot_single_area <- function(data_subset, category_name, valid_dates, all_dates,
       date_labels = "%m-%d",  # 日期格式：月-日
       expand = c(0, 0)  # 不留边距
     ) +
+    lims(y = c(0, 1)) + 
     theme_bw(base_size = 14) +  # 增加基础字体大小
     theme(
       # 图例设置：放在右边，垂直排列，无标题
       legend.position = "right",
       legend.direction = "vertical",  # 垂直排列
       legend.title = element_blank(),
-      legend.margin = margin(l = 5),
       legend.key.size = unit(0.8, "cm"),  # 图例方块大小
       legend.text = element_text(size = 25),  # 增大图例文字
       axis.title = element_text(size = 25),  # 增大轴标题
       axis.text = element_text(size = 25),   # 增大轴文字
-      plot.margin = margin(0.3, 0.3, 0.3, 0.3, "cm")
+      plot.title = element_text(size = 28, face = "bold", hjust = 0.5),  # 添加标题样式
+      plot.margin = margin(0.3, 0.3, 0.3, 0.3, "cm"), 
+      axis.text.x = element_text(angle = 90, hjust = 1, size = 20)
     ) +
     # 使用 guide_legend 进一步控制图例
     guides(
       fill = guide_legend(reverse = FALSE),  # 不反转，保持从大到小
       color = guide_legend(reverse = FALSE)
     )
+    
   
   # 控制 X 轴显示
   if (!show_x_axis) {
-    p <- p + theme(
-      axis.title.x = element_blank(), 
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-    )
-  } else {
-    p <- p + labs(x = "Date") +  # 简化标签
-      theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 16))  # 减小字号以适应更多日期
-  }
+    p <- p + theme(axis.title.x = element_blank())
+  } 
   
   return(p)
 }
 
-# Bug: 筛选数据：只保留 day_tot_mention >= 50 的日期
+# 筛选数据：只保留 day_tot_mention >= 30 的日期
 filtered_data <- coding_smry %>% filter(day_tot_mention >= 30)
 
-# 获取所有符合条件的有效日期（已经过滤了 day_tot_mention < 50 的日期）
+# 获取所有符合条件的有效日期（已经过滤了 day_tot_mention < 30 的日期）
 valid_dates <- filtered_data %>%
   distinct(post_date) %>%
   arrange(post_date) %>%
@@ -250,20 +250,35 @@ valid_dates <- filtered_data %>%
 # 获取完整日期范围（2025-09-19 到 2025-10-04）
 all_dates <- seq(as_date("2025-09-19"), as_date("2025-10-04"), by = "day")
 
-# 作图 - 增大图片尺寸
+# 生成所有子图并存储在列表中
+plot_list <- list()
 for (i in seq_along(categories)) {
   cat_name <- categories[i]
   cat_data <- filtered_data %>% filter(cat == cat_name)
   is_last <- (i == length(categories))
   
-  png(filename = paste0("data_proc/area_plot_", cat_name, ".png"),
-      width = 8, height = 4, units = "in", res = 300)  
-  plot_single_area(cat_data, cat_name, 
-                   valid_dates = valid_dates, 
-                   all_dates = all_dates,
-                   show_x_axis = is_last) %>% print()
-  dev.off()
+  plot_list[[i]] <- plot_single_area(
+    cat_data, 
+    cat_name, 
+    valid_dates = valid_dates, 
+    all_dates = all_dates,
+    show_x_axis = is_last
+  )
 }
+
+# 使用 patchwork 将所有图形组合成一列
+library(patchwork)
+# 合并图，但不合并图例。
+combined_plot_separate <- plot_list[[1]] / plot_list[[2]] / plot_list[[3]] / plot_list[[4]] +
+  plot_layout(
+    ncol = 1,
+    heights = c(1, 1, 1, 1)
+  )
+
+png(filename = "data_proc/combined_area_plots_separate_legends.png",
+    width = 12, height = 20, units = "in", res = 300)
+print(combined_plot_separate)
+dev.off()
 
 # 各主题提及数占总提及数的百分比。
 coding_smry %>% 
@@ -286,6 +301,6 @@ coding_smry %>%
   # 各子主题占总提及数的百分比。
   mutate(
     catsub_to_tot = round(cat_sub_mention / sum(cat_sub_mention) * 100, digits = 2)
-  ) %>% 
-  write.xlsx("data_proc/coding_subcategory_summary.xlsx")
+  )
+# write.xlsx("data_proc/coding_subcategory_summary.xlsx")
 
