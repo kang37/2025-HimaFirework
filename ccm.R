@@ -214,7 +214,7 @@ ccm_all_data %>%
   geom_line(aes(lib_size, rho, col = dir), linewidth = 1.2) + 
   facet_wrap(
     .~ tp, labeller = labeller(tp = function(x) paste("Tp =", x)), 
-    nrow = 1
+    nrow = 2
   ) + 
   scale_color_manual(
     breaks = c(
@@ -230,7 +230,7 @@ ccm_all_data %>%
     col = "Direction"
   ) +
   theme(
-    legend.position = "bottom",
+    legend.position = "right",
     strip.text = element_text(size = 12, face = "bold")
   )
 dev.off()
