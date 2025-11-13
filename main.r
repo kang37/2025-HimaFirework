@@ -154,6 +154,11 @@ all_dt_num_smry <-
   filter(post_date >= "2025-09-19")
 
 ## Trend fig ----
+time_fig_x_date <- c(
+  "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-24", 
+  "2025-9-26", "2025-9-28", "2025-9-29", 
+  "2025-10-04"
+)
 png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"), 
     width = 2000, height = 2000, res = 300
 )
@@ -171,14 +176,8 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
     labs(x = NULL, y = "Weibo index", color = NULL, linetype = NULL) +
     scale_x_date(
       limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-      breaks = as.Date(c(
-        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
-        "2025-10-04"
-      )),
-      labels = gsub("2025-", "", c(
-        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
-        "2025-10-04"
-      ))
+      breaks = as.Date(time_fig_x_date),
+      labels = gsub("2025-", "", time_fig_x_date)
     ) + 
     theme_bw() +
     theme(
@@ -203,14 +202,8 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
     labs(x = NULL, y = "Baidu index", color = NULL, linetype = NULL) +
     scale_x_date(
       limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-      breaks = as.Date(c(
-        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
-        "2025-10-04"
-      )),
-      labels = gsub("2025-", "", c(
-        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
-        "2025-10-04"
-      ))
+      breaks = as.Date(time_fig_x_date),
+      labels = gsub("2025-", "", time_fig_x_date)
     ) + 
     theme_bw() +
     theme(
@@ -246,7 +239,7 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
       labs(x = NULL, y = "Stock price\n(HKD)") +
       scale_x_date(
         limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-        breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
+        breaks = as.Date(time_fig_x_date),
         labels = NULL
       ) + 
       theme_bw() +
@@ -265,14 +258,8 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
       ) +
       scale_x_date(
         limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-        breaks = as.Date(c(
-          "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
-          "2025-10-04"
-        )),
-        labels = gsub("2025-", "", c(
-          "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
-          "2025-10-04"
-        ))
+        breaks = as.Date(time_fig_x_date),
+        labels = gsub("2025-", "", time_fig_x_date)
       ) +
       labs(x = "Date", y = "Stock\nChange") +
       theme_bw() +
