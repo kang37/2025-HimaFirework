@@ -155,7 +155,7 @@ all_dt_num_smry <-
 
 ## Trend fig ----
 png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"), 
-    width = 1600, height = 2000, res = 300
+    width = 2000, height = 2000, res = 300
 )
 (
   ggplot(all_dt_num_smry, aes(post_date)) +
@@ -171,8 +171,14 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
     labs(x = NULL, y = "Weibo index", color = NULL, linetype = NULL) +
     scale_x_date(
       limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-      breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
-      labels = c("9-19", "9-21", "09-26", "10-04")
+      breaks = as.Date(c(
+        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
+        "2025-10-04"
+      )),
+      labels = gsub("2025-", "", c(
+        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
+        "2025-10-04"
+      ))
     ) + 
     theme_bw() +
     theme(
@@ -180,7 +186,8 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
       legend.justification = c(1, 1),
       legend.text = element_text(size = 8),
       legend.key.height = unit(0.8, "lines"),
-      legend.background = element_rect(fill = "white", color = "grey")
+      legend.background = element_rect(fill = "white", color = "grey"), 
+      panel.grid.minor = element_blank()
     )
 ) / (
   ggplot(all_dt_num_smry, aes(post_date)) +
@@ -196,8 +203,14 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
     labs(x = NULL, y = "Baidu index", color = NULL, linetype = NULL) +
     scale_x_date(
       limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-      breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
-      labels = c("9-19", "9-21", "09-26", "10-04")
+      breaks = as.Date(c(
+        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
+        "2025-10-04"
+      )),
+      labels = gsub("2025-", "", c(
+        "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
+        "2025-10-04"
+      ))
     ) + 
     theme_bw() +
     theme(
@@ -205,7 +218,8 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
       legend.justification = c(1, 1),
       legend.text = element_text(size = 8),
       legend.key.height = unit(0.8, "lines"),
-      legend.background = element_rect(fill = "white", color = "grey")
+      legend.background = element_rect(fill = "white", color = "grey"), 
+      panel.grid.minor = element_blank()
     )
 ) / (
   # 绘制K线图，包含5日均线。
@@ -251,8 +265,14 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
       ) +
       scale_x_date(
         limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
-        breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
-        labels = c("9-19", "9-21", "09-26", "10-04")
+        breaks = as.Date(c(
+          "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
+          "2025-10-04"
+        )),
+        labels = gsub("2025-", "", c(
+          "2025-9-19", "2025-9-21", "2025-9-22", "2025-9-26", "2025-9-29", 
+          "2025-10-04"
+        ))
       ) +
       labs(x = "Date", y = "Stock\nChange") +
       theme_bw() +
