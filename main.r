@@ -325,7 +325,7 @@ get_cor <- function(df_x) {
     labs(fill = "r") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
-get_cor(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward))
+get_cor(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward, -himalaya_cn))
 
 ## Cor plot for paper ----
 generate_expanded_grid <- function(x_values, y_values, 
@@ -499,8 +499,7 @@ custom_labels <- c(
   # 品牌相关
   "caiguoqiang_cn" = "Cai Guoqiang",
   "arctery_cn" = "Arc'teryx",
-  "anta_cn" = "Anta",
-  "himalaya_cn" = "Himalaya",
+  "anta_cn" = "Anta", 
   
   # 股票相关
   "stock_change" = "Stock Change"
@@ -514,21 +513,20 @@ variable_order <- c(
   "Cai Guoqiang",
   "Arc'teryx",
   "Anta",
-  "Himalaya",
   "Stock Change"
 )
 
 png("data_proc/correlation_circle_lower_baidu.png", width = 1600, height = 1200, res = 300)
 get_cor_circle_styled(
-  all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward), 
+  all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward, -himalaya_cn), 
   label_map = custom_labels,
   var_order = variable_order,
   white_density = 0.1,
   white_size = 0.2,
   white_alpha = 0.7, 
   non_sig_data = rbind(
-    generate_expanded_grid(1, 1:7), 
-    generate_expanded_grid(6:7, 1)
+    generate_expanded_grid(1, 1:6)
+    # generate_expanded_grid(6, 1)
   ) 
 ) + 
   theme(panel.border = element_blank(), axis.ticks = element_blank())
