@@ -8,7 +8,7 @@ pacman::p_load(
 showtext_auto()
 
 # Basic data ----
-# 函数：推算日期。从一个数据框的一列中提取日期。这列中有两种类型数据，一类类似于“2025/09/28 11:35:15”，另一类类似于“1小时前 转赞人数超过100”。对于前者，直接提取日期并转化成日期类型，对于后者，我的数据下载时间是2025-09-29 10:55:00，根据这个推算。
+# 函数：推算日期。从一个数据框的一列中提取日期。这列中有两种类型数据，一类类似于"2025/09/28 11:35:15"，另一类类似于"1小时前 转赞人数超过100"。对于前者，直接提取日期并转化成日期类型，对于后者，我的数据下载时间是2025-09-29 10:55:00，根据这个推算。
 # 定义推算相对日期的函数
 calc_relative_date <- function(time_str, download_time) {
   # 提取下载时间。
@@ -79,15 +79,15 @@ data <- lapply(
   # 将点赞、评论、转发等转化成数字。
   mutate(
     forward_count = case_when(
-      str_detect(forward_count, "转发") ~ 0,  # 含“赞”时设为0
+      str_detect(forward_count, "转发") ~ 0,  # 含"赞"时设为0
       TRUE ~ str_replace_all(forward_count, "万", "e4") %>% parse_number()
     ), 
     review_count = case_when(
-      str_detect(review_count, "评论") ~ 0,  # 含“赞”时设为0
+      str_detect(review_count, "评论") ~ 0,  # 含"赞"时设为0
       TRUE ~ str_replace_all(review_count, "万", "e4") %>% parse_number()
     ), 
     like_count = case_when(
-      str_detect(like_count, "赞") ~ 0,  # 含“赞”时设为0
+      str_detect(like_count, "赞") ~ 0,  # 含"赞"时设为0
       TRUE ~ str_replace_all(like_count, "万", "e4") %>% parse_number()
     )
   )
@@ -96,23 +96,33 @@ data <- lapply(
 anta_stock <- 
   tidyquant::tq_get("2020.HK", from = "2025-09-15", to = "2025-10-04")
 
-# 谷歌趋势：“蔡国强”、“始祖鸟”、“安踏”、“喜马拉雅”的谷歌趋势。
-goo_trend <- lapply(
-  c("caiguoqiang_cn", "arctery_cn", "anta_cn", "himalaya_cn"), 
-  function(x) {
-    read.csv(paste0("data_raw/", x, ".csv")) %>% 
-      slice(-1) %>% 
-      rownames_to_column(var = "date") %>% 
-      rename_with(~ c("date", x))
-  }
-) %>% 
-  reduce(left_join, by = "date") %>% 
-  mutate(date = as_date(date)) %>% 
-  mutate(across(-date, ~ as.numeric(gsub("[^0-9.]", "", .x))))
+# ============================================================================
+# 百度指数：替换谷歌趋势
+# ============================================================================
+# 读取百度指数数据的函数
+read_baidu_index <- function(filename, keyword_col_name) {
+  df <- read.xlsx(filename) %>% 
+    mutate(时间 = as_date(时间), `搜索pc+移动` = as.numeric(`搜索pc+移动`)) %>%
+    # 只保留需要的列
+    select(date = 时间, !!keyword_col_name := "搜索pc+移动")
+  
+  return(df)
+}
 
-# 舆论变量数量汇总：微博文本数，安踏股价，谷歌趋势。
-# Bug: 百度指数暂时无法获得。
-# Bug: 微博数据量是否可靠？不清楚Octoparse的抓取方式。
+# 读取四个关键词的百度指数
+baidu_caiguoqiang <- read_baidu_index("data_raw/baidu_caiguoqiang.xlsx", "caiguoqiang_cn")
+baidu_shizuniao <- read_baidu_index("data_raw/baidu_shizuniao.xlsx", "arctery_cn")
+baidu_anta <- read_baidu_index("data_raw/baidu_anta.xlsx", "anta_cn")
+baidu_ximalaya <- read_baidu_index("data_raw/baidu_ximalaya.xlsx", "himalaya_cn")
+
+# 合并所有百度指数数据
+baidu_trend <- baidu_caiguoqiang %>%
+  full_join(baidu_shizuniao, by = "date") %>%
+  full_join(baidu_anta, by = "date") %>%
+  full_join(baidu_ximalaya, by = "date") %>%
+  arrange(date)
+
+# 舆论变量数量汇总：微博文本数，安踏股价，百度指数（替代谷歌趋势）
 all_dt_num_smry <- 
   # 微博文本数。
   data %>% 
@@ -124,8 +134,8 @@ all_dt_num_smry <-
     weibo_num_like = sum(like_count), 
     .groups = "drop"
   ) %>% 
-  # 谷歌指数。
-  full_join(goo_trend, by = c("post_date" = "date")) %>% 
+  # 百度指数（替代谷歌趋势）
+  full_join(baidu_trend, by = c("post_date" = "date")) %>% 
   # 安踏股价。
   full_join(
     anta_stock %>% select(date, adj_stock = adjusted), 
@@ -144,7 +154,7 @@ all_dt_num_smry <-
   filter(post_date >= "2025-09-19")
 
 ## Trend fig ----
-png("data_proc/time_series_weibo_google_stock.png", 
+png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"), 
     width = 1600, height = 2000, res = 300
 )
 (
@@ -169,45 +179,32 @@ png("data_proc/time_series_weibo_google_stock.png",
       legend.position = c(0.95, 0.95),
       legend.justification = c(1, 1),
       legend.text = element_text(size = 8),
-      legend.key.height = unit(0.05, "lines"),
-      legend.spacing.y = unit(0.05, "lines"),
+      legend.key.height = unit(0.8, "lines"),
       legend.background = element_rect(fill = "white", color = "grey")
     )
 ) / (
-  all_dt_num_smry %>%
-    select(post_date, caiguoqiang_cn, arctery_cn, anta_cn, himalaya_cn) %>%
-    pivot_longer(
-      -post_date, names_to  = "keyword", values_to = "value"
-    ) %>%
-    mutate(
-      keyword = recode(
-        keyword, 
-        caiguoqiang_cn = "Cai Guoqiang", arctery_cn = "Arc'teryx", 
-        anta_cn = "Anta", himalaya_cn = "Himalaya"
-      ),
-      keyword = factor(keyword, levels = c("Cai Guoqiang", "Arc'teryx", "Anta", "Himalaya"))
-    ) %>% 
-    ggplot(aes(post_date, value, color = keyword)) + 
-    geom_line(linewidth = 0.8) +
-    scale_color_manual(values = c(
-      "Cai Guoqiang" = "#1f77b4", 
-      "Arc'teryx" = "#2ca02c", 
-      "Anta" = "#17becf",
-      "Himalaya" = "purple"
-    )) +
-    labs(x = NULL, y = "Google trend\nindex", color = NULL, linetype = NULL) +
-    theme_bw() +
+  ggplot(all_dt_num_smry, aes(post_date)) +
+    # 1. 将颜色映射到 aes() 内部，使用描述性字符串作为图例键
+    geom_line(aes(y = caiguoqiang_cn / 10, color = "Cai Guoqiang / 10")) + 
+    geom_line(aes(y = arctery_cn / 5, color = "Arc'teryx / 5")) + 
+    geom_line(aes(y = anta_cn, color = "Anta")) +
+    # 使用 scale_color_manual 来控制图例的外观
+    scale_color_manual(
+      breaks = c("Cai Guoqiang / 10","Arc'teryx / 5", "Anta"), 
+      values = c("#1f77b4", "#2ca02c", "#17becf")
+    ) + 
+    labs(x = NULL, y = "Baidu index", color = NULL, linetype = NULL) +
     scale_x_date(
       limits = c(as.Date("2025-09-18"), as.Date("2025-10-05")),
       breaks = as.Date(c("2025-09-19", "2025-09-21", "2025-09-26", "2025-10-04")),
       labels = c("9-19", "9-21", "09-26", "10-04")
     ) + 
+    theme_bw() +
     theme(
       legend.position = c(0.95, 0.95),
       legend.justification = c(1, 1),
       legend.text = element_text(size = 8),
-      legend.key.height = unit(0.05, "lines"),
-      legend.spacing.y = unit(0.05, "lines"),
+      legend.key.height = unit(0.8, "lines"),
       legend.background = element_rect(fill = "white", color = "grey")
     )
 ) / (
@@ -501,7 +498,7 @@ variable_order <- c(
   "Stock Change"
 )
 
-png("data_proc/correlation_circle_lower.png", width = 1600, height = 1200, res = 300)
+png("data_proc/correlation_circle_lower_baidu.png", width = 1600, height = 1200, res = 300)
 get_cor_circle_styled(
   all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward), 
   label_map = custom_labels,
