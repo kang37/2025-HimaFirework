@@ -122,7 +122,7 @@ baidu_trend <- baidu_caiguoqiang %>%
   full_join(baidu_ximalaya, by = "date") %>%
   arrange(date)
 
-# 舆论变量数量汇总：微博文本数，安踏股价，百度指数（替代谷歌趋势）
+# 舆论变量数量汇总：微博文本数，安踏股价，百度指数。
 all_dt_num_smry <- 
   # 微博文本数。
   data %>% 
@@ -167,11 +167,12 @@ png(paste0("data_proc/time_series_weibo_baidu_stock_", Sys.Date(), ".png"),
     # 1. 将颜色映射到 aes() 内部，使用描述性字符串作为图例键
     geom_line(aes(y = weibo_num, color = "Posts")) +
     geom_line(aes(y = weibo_num_like / 1000, color = "Likes / 1000")) + 
-    geom_line(aes(y = weibo_num_review / 100, color = "Reviews / 80")) +
+    geom_line(aes(y = weibo_num_review / 100, color = "Comments / 100")) +
+    geom_line(aes(y = weibo_num_forward / 100, color = "Shares / 100")) +
     # 使用 scale_color_manual 来控制图例的外观
     scale_color_manual(
-      breaks = c("Posts", "Likes / 1000","Reviews / 80"), 
-      values = c("#8B0000", "#FF4500", "#FFD700")
+      breaks = c("Posts", "Likes / 1000","Comments / 100", "Shares / 100"), 
+      values = c("#8B0000", "#FF4500", "#FFD700", "black")
     ) + 
     labs(x = NULL, y = "Weibo index", color = NULL, linetype = NULL) +
     scale_x_date(
@@ -312,7 +313,7 @@ get_cor <- function(df_x) {
     labs(fill = "r") +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
-get_cor(all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward, -himalaya_cn))
+get_cor(all_dt_num_smry %>% select(-adj_stock, -himalaya_cn))
 
 ## Cor plot for paper ----
 generate_expanded_grid <- function(x_values, y_values, 
