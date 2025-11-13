@@ -1,5 +1,6 @@
-# 安踏股价与“始祖鸟”谷歌趋势的CCM因果分析。
-# 包含因果方向、性质（正负相关）、强度分析。
+# 安踏股价与"始祖鸟"百度指数的CCM因果分析
+# 包含因果方向、性质（正负相关）、强度分析
+# 修改：使用百度指数替代谷歌趋势
 
 library(dplyr)
 library(ggplot2)
@@ -8,35 +9,54 @@ library(tidyquant)
 library(tidyr)
 library(gridExtra)
 library(zoo)
+library(openxlsx)
 
 # Data ----
-# 1.1 读取谷歌趋势数据：2025-09-05至2025-10-18。
-google_trends <- read.csv("data_raw/arctery_cn_long.csv", skip = 2) %>%
-  rename_with(~ c("date", "google_trend")) %>% 
-  mutate(
-    date = as.Date(date),
-    google_trend = as.numeric(google_trend)
-  ) %>%
-  filter(!is.na(google_trend))
+# 1.1 读取百度指数数据（替代谷歌趋势）
+# 如果要分析"始祖鸟"，就读取baidu_shizuniao.xlsx
+# 如果要分析其他关键词，修改文件名即可
+
+# 函数：读取百度指数文件
+read_baidu_index_file <- function(filename) {
+  df <- read.xlsx(filename) %>%
+    rename_with(~tolower(gsub("[^a-zA-Z0-9+]", "_", .x))) %>%
+    mutate(
+      # 将时间列转换为日期
+      时间 = as.Date(时间)
+    ) %>%
+    # 只保留需要的列：日期和搜索pc+移动
+    select(date = 时间, baidu_index = 搜索pc_移动)
+  
+  return(df)
+}
+
+# 读取"始祖鸟"的百度指数（用于CCM分析）
+# 如需分析其他关键词，修改文件名：
+# - baidu_caiguoqiang.xlsx (蔡国强)
+# - baidu_shizuniao.xlsx (始祖鸟)
+# - baidu_anta.xlsx (安踏)
+# - baidu_ximalaya.xlsx (喜马拉雅)
+
+baidu_trend <- read_baidu_index_file("data_raw/baidu_shizuniao.xlsx")
 
 # 1.2 读取股价数据
 stock_data <- tidyquant::tq_get(
   "2020.HK", 
-  from = min(google_trends$date),
-  to = max(google_trends$date)
+  from = min(baidu_trend$date),
+  to = max(baidu_trend$date)
 ) %>% 
   select(date, adj_close = adjusted) %>%
   arrange(date)
 
 # 1.3 合并数据并补全周末/节假日股价
 
-# 先用left_join保留所有谷歌趋势的日期
-anta_data <- google_trends %>%
+# 先用left_join保留所有百度指数的日期
+anta_data <- baidu_trend %>%
   left_join(stock_data, by = "date") %>%
   arrange(date) %>%
   # 向前填充股价（使用前一个交易日的价格）
   mutate(
-    # 使用tidyr::fill向前填充NA值
+    # 将NA填充为前一个非NA值。
     adj_close = zoo::na.locf(adj_close, na.rm = FALSE)
   ) %>%
   # 移除开始的NA（如果第一天没有股价数据）
@@ -48,6 +68,13 @@ anta_data <- google_trends %>%
     is_trading_day = date %in% stock_data$date
   ) %>%
   filter(!is.na(stock_change))
+
+# 查看数据概况
+cat("数据范围：", as.character(min(anta_data$date)), "至", 
+    as.character(max(anta_data$date)), "\n")
+cat("总天数：", nrow(anta_data), "\n")
+cat("百度指数范围：", min(anta_data$baidu_index, na.rm = TRUE), "至", 
+    max(anta_data$baidu_index, na.rm = TRUE), "\n")
 
 # ============================================================================
 # 2. 数据去趋势和标准化
@@ -70,13 +97,15 @@ detrend_linear <- function(x) {
 
 anta_data_processed <- anta_data %>%
   mutate(
-    # 去趋势
+    # 去趋势（使用百度指数替代谷歌趋势）
     stock_norm = detrend_linear(adj_close),
-    trend_norm = detrend_linear(google_trend),
+    baidu_norm = detrend_linear(anta_cn),  # 修改为百度指数
     change_norm = detrend_linear(stock_change)
   ) %>%
   # 移除任何包含NA的行
-  filter(!is.na(stock_norm), !is.na(trend_norm), !is.na(change_norm))
+  filter(!is.na(stock_norm), !is.na(baidu_norm), !is.na(change_norm))
+
+cat("去趋势后数据量：", nrow(anta_data_processed), "\n")
 
 # ============================================================================
 # 3. 确定最优嵌入维度E
@@ -84,12 +113,14 @@ anta_data_processed <- anta_data %>%
 embed_data <- data.frame(
   time = 1:nrow(anta_data_processed),
   stock = anta_data_processed$stock_norm,
-  trend = anta_data_processed$trend_norm,
+  baidu = anta_data_processed$baidu_norm,  # 修改为百度指数
   change = anta_data_processed$change_norm
 )
 
 n_data <- nrow(embed_data)
 lib_end <- floor(n_data * 0.7)
+
+cat("\n开始计算最优嵌入维度E...\n")
 
 E_stock <- EmbedDimension(
   dataFrame = embed_data,
@@ -98,17 +129,17 @@ E_stock <- EmbedDimension(
   maxE = 4,
   columns = "stock",
   target = "stock",
-  showPlot = TRUE
+  showPlot = FALSE
 )
 
-E_trend <- EmbedDimension(
+E_baidu <- EmbedDimension(  # 修改变量名
   dataFrame = embed_data,
   lib = paste("1", lib_end),
   pred = paste(lib_end + 1, n_data),
   maxE = 4,
-  columns = "trend",
-  target = "trend",
-  showPlot = TRUE
+  columns = "baidu",  # 修改为百度指数
+  target = "baidu",
+  showPlot = FALSE
 )
 
 E_change <- EmbedDimension(
@@ -118,88 +149,98 @@ E_change <- EmbedDimension(
   maxE = 4,
   columns = "change",
   target = "change",
-  showPlot = TRUE
+  showPlot = FALSE
 )
 
 best_E_stock <- E_stock$E[which.max(E_stock$rho)]
-best_E_trend <- E_trend$E[which.max(E_trend$rho)]
+best_E_baidu <- E_baidu$E[which.max(E_baidu$rho)]  # 修改变量名
 best_E_change <- E_change$E[which.max(E_change$rho)]
-best_E <- round(max(c(best_E_stock, best_E_trend, best_E_change)))
+best_E <- round(max(c(best_E_stock, best_E_baidu, best_E_change)))
+
+cat("最优嵌入维度：\n")
+cat("  Stock E =", best_E_stock, "\n")
+cat("  Baidu E =", best_E_baidu, "\n")
+cat("  Change E =", best_E_change, "\n")
+cat("  选择的E =", best_E, "\n")
 
 # ============================================================================
 # 4. 多Tp CCM分析
 # ============================================================================
+cat("\n开始CCM分析...\n")
 tp_values <- c(0, 1, 2, 3)
 
-# 准备数据
+# 准备数据（修改为使用百度指数）
 ccm_data_level <- data.frame(
   time = 1:nrow(anta_data_processed),
   stock = anta_data_processed$stock_norm,
-  trend = anta_data_processed$trend_norm
+  baidu = anta_data_processed$baidu_norm  # 修改为百度指数
 )
 
 ccm_data_change <- data.frame(
   time = 1:nrow(anta_data_processed),
   change = anta_data_processed$change_norm,
-  trend = anta_data_processed$trend_norm
+  baidu = anta_data_processed$baidu_norm  # 修改为百度指数
 )
 
 max_lib <- nrow(ccm_data_level) - best_E - max(tp_values)
 lib_sizes_str <- sprintf("10 %d 3", max_lib)
+
+cat("库大小范围：10 到", max_lib, "\n")
 
 # 运行CCM分析
 ccm_results_all <- list()
 for (tp in tp_values) {
   cat("  [Tp =", tp, "]\n")
   
-  # 股价水平
+  # 股价水平（修改为百度指数）
   ccm_level <- CCM(
     dataFrame = ccm_data_level,
     E = best_E,
     Tp = tp,
-    columns = "trend",
+    columns = "baidu",  # 修改为百度指数
     target = "stock",
     libSizes = lib_sizes_str,
     sample = 100,
     random = TRUE,
     seed = 123 + tp, 
-    showPlot = T
+    showPlot = FALSE
   ) %>% 
-    pivot_longer(cols = c("trend:stock", "stock:trend")) %>% 
+    pivot_longer(cols = c("baidu:stock", "stock:baidu")) %>%  # 修改列名
     separate_wider_delim(cols = name, delim = ":", names = c("to", "from")) %>% 
     rename(lib_size = LibSize, rho = value) %>% 
     mutate(tp = tp)
   
-  # 股价变化量
+  # 股价变化量（修改为百度指数）
   ccm_change <- CCM(
     dataFrame = ccm_data_change,
     E = best_E,
     Tp = tp,
-    columns = "trend",
+    columns = "baidu",  # 修改为百度指数
     target = "change",
     libSizes = lib_sizes_str,
     sample = 100,
     random = TRUE,
     seed = 456 + tp
   ) %>% 
-    pivot_longer(cols = c("trend:change", "change:trend")) %>% 
+    pivot_longer(cols = c("baidu:change", "change:baidu")) %>%  # 修改列名
     separate_wider_delim(cols = name, delim = ":", names = c("to", "from")) %>% 
     rename(lib_size = LibSize, rho = value) %>% 
     mutate(tp = tp)
   
   ccm_results_all[[paste0("Tp", tp, "_level")]] <- ccm_level
-  
   ccm_results_all[[paste0("Tp", tp, "_change")]] <- ccm_change
   
   cat("\t完成\n")
 }
+
+# 合并所有结果（修改标签）
 ccm_all_data <- bind_rows(ccm_results_all) %>% 
   mutate(
     dir = case_when(
-      from == "trend" & to == "stock" ~ "Stock xmap Trend", 
-      from == "trend" & to == "change" ~ "Stock change xmap Trend", 
-      from == "stock" & to == "trend" ~ "Trend xmap Stock", 
-      from == "change" & to == "trend" ~ "Trend xmap Stock change"
+      from == "baidu" & to == "stock" ~ "Stock xmap Baidu", 
+      from == "baidu" & to == "change" ~ "Stock change xmap Baidu", 
+      from == "stock" & to == "baidu" ~ "Baidu xmap Stock", 
+      from == "change" & to == "baidu" ~ "Baidu xmap Stock change"
     ), 
     type = case_when(
       from == "stock" | to == "stock" ~ "Stock",
@@ -207,23 +248,57 @@ ccm_all_data <- bind_rows(ccm_results_all) %>%
     )
   )
 
+# 绘制CCM收敛图
+cat("\n绘制CCM收敛图...\n")
+
+png(
+  paste0("data_proc/ccm_convergence_baidu_", Sys.Date(), ".png"), 
+  width = 2400, height = 1600, res = 300
+)
 ccm_all_data %>% 
   ggplot() + 
-  geom_line(aes(lib_size, rho, col = dir)) + 
-  facet_grid(type ~ tp) + 
+  geom_line(aes(lib_size, rho, col = dir), linewidth = 1.2) + 
+  facet_grid(type ~ tp, 
+             labeller = labeller(tp = function(x) paste("Tp =", x))) + 
   scale_color_manual(
     breaks = c(
-      "Trend xmap Stock", "Stock xmap Trend", 
-      "Trend xmap Stock change", "Stock change xmap Trend"
+      "Baidu xmap Stock", "Stock xmap Baidu", 
+      "Baidu xmap Stock change", "Stock change xmap Baidu"
     ),
     values = c("lightblue3", "darkred", "darkgreen", "orange")
   ) +
-  theme_bw() + 
-  labs(x = "Library size", col = "Direction")
+  theme_bw(base_size = 14) + 
+  labs(
+    x = "Library size", 
+    y = "Cross-mapping skill (ρ)",
+    col = "Direction",
+    title = "CCM Analysis: Baidu Index vs Stock Price"
+  ) +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(size = 12, face = "bold")
+  )
+dev.off()
+
+
+# 输出收敛性评估
+cat("\n收敛性评估（Tp=0和Tp=1）:\n")
+ccm_summary <- ccm_all_data %>%
+  filter(tp %in% c(0, 1)) %>%
+  group_by(tp, dir) %>%
+  summarise(
+    max_rho = max(rho, na.rm = TRUE),
+    final_rho = last(rho),
+    convergence = final_rho - first(rho),
+    .groups = "drop"
+  )
+print(ccm_summary)
 
 # ============================================================================
-# 5. 确定因果性质
+# 5. 确定因果性质（S-mapping）
 # ============================================================================
+cat("\n开始S-map分析（确定因果性质）...\n")
+
 # S-mapping函数：计算交互强度系数
 calculate_smap_coefficient <- function(data, E, target_col, lib_col, tp = 0) {
   # 准备数据
@@ -279,18 +354,18 @@ calculate_smap_coefficient <- function(data, E, target_col, lib_col, tp = 0) {
   ))
 }
 
-# 计算趋势对股价的影响性质：A增导致B增加还是减少？
+# 计算百度指数对股价的影响性质：百度指数增加导致股价增加还是减少？
 smap_results <- list()
 for(tp in tp_values) {
   cat(sprintf("  计算 Tp=%d 的S-map系数...\n", tp))
   
-  # 股价水平：trend对stock的影响
+  # 股价水平：百度指数对stock的影响
   tryCatch({
     smap_stock <- calculate_smap_coefficient(
       data = anta_data_processed,
       E = best_E,
       target_col = "stock_norm",
-      lib_col = "trend_norm",
+      lib_col = "baidu_norm",  # 修改为百度指数
       tp = tp
     )
     
@@ -300,6 +375,9 @@ for(tp in tp_values) {
       smap_mean = smap_stock$mean_coefficient,
       smap_sd = smap_stock$sd_coefficient
     )
+    
+    cat(sprintf("    Tp=%d: 平均系数=%.4f ± %.4f\n", 
+                tp, smap_stock$mean_coefficient, smap_stock$sd_coefficient))
   }, error = function(e) {
     cat(sprintf("    警告: Tp=%d Stock 的S-map计算失败: %s\n", tp, e$message))
     smap_results[[paste0("Tp", tp, "_stock")]] <<- data.frame(
@@ -310,4 +388,9 @@ for(tp in tp_values) {
     )
   })
 }
-bind_rows(smap_results) %>% View()
+
+# 汇总S-map结果
+smap_summary <- bind_rows(smap_results)
+cat("\nS-map系数汇总:\n")
+print(smap_summary)
+
