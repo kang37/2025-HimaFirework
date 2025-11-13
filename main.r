@@ -483,6 +483,7 @@ custom_labels <- c(
   "weibo_num" = "Posts",
   "weibo_num_review" = "Comments",
   "weibo_num_like" = "Likes",
+  "weibo_num_forward" = "Shares", 
   
   # 品牌相关
   "caiguoqiang_cn" = "Cai Guoqiang",
@@ -496,8 +497,9 @@ custom_labels <- c(
 # 指定变量顺序
 variable_order <- c(
   "Posts",
-  "Comments", 
   "Likes",
+  "Comments", 
+  "Shares", 
   "Cai Guoqiang",
   "Arc'teryx",
   "Anta",
@@ -506,14 +508,14 @@ variable_order <- c(
 
 png("data_proc/correlation_circle_lower_baidu.png", width = 1600, height = 1200, res = 300)
 get_cor_circle_styled(
-  all_dt_num_smry %>% select(-adj_stock, -weibo_num_forward, -himalaya_cn), 
+  all_dt_num_smry %>% select(-adj_stock, -himalaya_cn), 
   label_map = custom_labels,
   var_order = variable_order,
   white_density = 0.1,
   white_size = 0.2,
   white_alpha = 0.7, 
   non_sig_data = rbind(
-    generate_expanded_grid(1, 1:6)
+    generate_expanded_grid(1, 1:7)
     # generate_expanded_grid(6, 1)
   ) 
 ) + 
