@@ -13,7 +13,9 @@ library(openxlsx)
 stock_data <- tidyquant::tq_get(
   "2020.HK", 
   from = min(baidu_trend$date),
-  to = max(baidu_trend$date)
+  # Bug: 如果要做长期分析，则修改这里。
+  # to = max(baidu_trend$date)
+  to = "2025-10-18"
 ) %>% 
   select(date, adj_close = adjusted) %>%
   arrange(date)
@@ -22,6 +24,7 @@ stock_data <- tidyquant::tq_get(
 
 # 先用left_join保留所有百度指数的日期
 anta_data <- baidu_trend %>%
+  filter(date <= as_date("2025-10-18")) %>% 
   left_join(stock_data, by = "date") %>%
   arrange(date) %>%
   # 向前填充股价（使用前一个交易日的价格）
@@ -110,8 +113,9 @@ E_change <- EmbedDimension(
 
 best_E_stock <- E_stock$E[which.max(E_stock$rho)]
 best_E_baidu <- E_baidu$E[which.max(E_baidu$rho)]  # 修改变量名
-best_E_change <- E_change$E[which.max(E_change$rho)]
-best_E <- round(max(c(best_E_stock, best_E_baidu, best_E_change)))
+# Bug：不需要做变化量的检测。
+# best_E_change <- E_change$E[which.max(E_change$rho)]
+best_E <- round(max(c(best_E_stock, best_E_baidu)))
 
 cat(
   "最优嵌入维度：\n", 
