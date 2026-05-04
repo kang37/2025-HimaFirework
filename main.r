@@ -615,42 +615,6 @@ dfmat_tag <- weibo_corpus %>%
   # 提取标签。
   dfm(.) %>% 
   dfm_select(., pattern = "#*")
-# 各日期各标签的频度。
-df_date_freq <- 
-  # 筛选 DFM，只保留这 20 个标签
-  dfm_select(dfmat_tag, pattern = top_tag) %>% 
-  # 2.1 按 'post_date' 变量对 DFM 进行汇总 (即按日期求和)
-  dfm_group(., groups = post_date) %>%
-  convert(to = "data.frame") %>%
-  # 重命名日期列 (dfm_group 会将日期移到 docname 列)
-  rename(date = doc_id) %>%
-  # 转换为长格式：将所有特征列合并为两列 (Tag 和 Frequency)
-  pivot_longer(
-    cols = !date, 
-    names_to = "Tag",
-    values_to = "Frequency"
-  ) %>%
-  # 确保 Date 是日期类型
-  mutate(date = as_date(date)) %>% 
-  arrange(-Frequency)
-
-# 绘制高频标签随时间变化的图表
-# ggplotly(
-#   df_date_freq %>%
-#     # 仅保留出现次数大于 0 的数据点
-#     filter(Frequency > 0) %>%
-#     ggplot(aes(x = date, y = Frequency, fill = Tag)) +
-#     geom_col(position = "fill") +
-#     labs(
-#       title = "高频标签在各个日期的出现频率",
-#       x = "日期",
-#       y = "出现频率 (计数)",
-#       color = "高频标签"
-#     ) +
-#     theme_minimal() +
-#     scale_x_date(date_breaks = "1 day", date_labels = "%m-%d") + # 优化日期轴显示
-#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) # 旋转 x 轴标签
-# )
 
 # 组合词。
 multi_word_phrases <- list(
