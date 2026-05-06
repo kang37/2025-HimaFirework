@@ -14,8 +14,8 @@ stock_data <- tidyquant::tq_get(
   "2020.HK", 
   from = min(baidu_trend$date),
   # Bug: 如果要做长期分析，则修改这里。
-  # to = max(baidu_trend$date)
-  to = "2025-10-18"
+  to = max(baidu_trend$date)
+  # to = "2025-10-18"
 ) %>% 
   select(date, adj_close = adjusted) %>%
   arrange(date)
@@ -24,7 +24,8 @@ stock_data <- tidyquant::tq_get(
 
 # 先用left_join保留所有百度指数的日期
 anta_data <- baidu_trend %>%
-  filter(date <= as_date("2025-10-18")) %>% 
+  # Bug: 短期还是长期？
+  # filter(date <= as_date("2025-10-18")) %>% 
   left_join(stock_data, by = "date") %>%
   arrange(date) %>%
   # 向前填充股价（使用前一个交易日的价格）
