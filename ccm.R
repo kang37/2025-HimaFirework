@@ -344,5 +344,94 @@ for(tp in tp_values) {
 }
 
 # 汇总S-map结果
-bind_rows(smap_results)
+smap_summary_final <- bind_rows(smap_results)
+print(smap_summary_final)
+write.xlsx(smap_summary_final, paste0("data_proc/smap_summary_", Sys.Date(), ".xlsx"))
 
+# ============================================================================
+# 新增：保留所有局部导数并可视化
+# ============================================================================
+cat("\n正在计算每日局部导数并生成可视化...\n")
+
+smap_daily_list <- list()
+
+for(tp in tp_values) {
+  # 重新运行S-map获取完整系数矩阵
+  smap_data_daily <- data.frame(
+    time = 1:nrow(anta_data_processed),
+    target = anta_data_processed$stock_norm,
+    library = anta_data_processed$baidu_norm
+  )
+  
+  smap_res <- SMap(
+    dataFrame = smap_data_daily,
+    lib = paste("1", floor(nrow(smap_data_daily) * 0.8)),
+    pred = paste(1, nrow(smap_data_daily)),
+    E = best_E,
+    Tp = tp,
+    columns = "library",
+    target = "target",
+    theta = 2,
+    embedded = FALSE
+  )
+  
+  # 提取系数矩阵
+  coef_mtx <- if("coefficients" %in% names(smap_res)) smap_res$coefficients else smap_res$smap_coefficients
+  
+  # 识别自变量(library)对应的列
+  lib_col_names <- grep("library", colnames(coef_mtx), value = TRUE)
+  
+  if(length(lib_col_names) > 0) {
+    # 如果有多个滞后项系数(E > 1)，通常取第一项（当前时刻的影响）
+    # 或者取平均值。这里取第一项以反映即时交互。
+    daily_deriv <- coef_mtx[, lib_col_names[1]]
+    
+    # 关键修正：确保日期与导数行数一致
+    # S-map 在 Tp > 0 时会因为预测区间导致末尾缺失行
+    n_rows <- length(daily_deriv)
+    
+    smap_daily_list[[paste0("Tp", tp)]] <- data.frame(
+      date = anta_data_processed$date[1:n_rows],
+      derivative = daily_deriv,
+      tp = tp
+    )
+  }
+}
+
+# 合并所有Tp的结果
+smap_daily_df <- bind_rows(smap_daily_list)
+
+# 1. 绘制每日导数随时间变化的趋势图
+png(
+  paste0("data_proc/smap_daily_derivatives_", Sys.Date(), ".png"), 
+  width = 2400, height = 1600, res = 300
+)
+ggplot(smap_daily_df, aes(x = date, y = derivative)) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6) +
+  geom_line(alpha = 0.6) +
+  geom_point(size = 1.2) +
+  facet_wrap(~ tp, scales = "free_y", ncol = 2, 
+             labeller = labeller(tp = function(x) paste("Tp =", x))) +
+  scale_x_date(
+    breaks = as.Date(time_fig_x_date),
+    labels = gsub("2025-", "", time_fig_x_date)
+  ) +
+  # 纵轴最高设置为 0.005，使用 coord_cartesian 以免滤掉超出范围的点
+  coord_cartesian(ylim = c(NA, 0.005)) +
+  labs(
+    x = "Date", 
+    y = "Local derivative (∂Stock / ∂Baidu)"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    strip.background = element_rect(fill = "gray95"),
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+dev.off()
+
+# 2. 保存详细数据
+write.xlsx(smap_daily_df, paste0("data_proc/smap_daily_details_", Sys.Date(), ".xlsx"))
