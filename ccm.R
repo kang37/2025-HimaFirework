@@ -8,6 +8,7 @@ library(gridExtra)
 library(zoo)
 library(openxlsx)
 library(lubridate)
+library(readr)
 
 # Data Initialization ----
 # 1.1 读取百度指数数据
@@ -23,7 +24,7 @@ baidu_shizuniao <- read_baidu_index("data_raw/baidu_shizuniao.xlsx", "arctery_cn
 baidu_anta <- read_baidu_index("data_raw/baidu_anta.xlsx", "anta_cn")
 baidu_ximalaya <- read_baidu_index("data_raw/baidu_ximalaya.xlsx", "himalaya_cn")
 
-baidu_trend <- baiguoqiang <- baidu_caiguoqiang %>%
+baidu_trend <- baidu_caiguoqiang %>%
   full_join(baidu_shizuniao, by = "date") %>%
   full_join(baidu_anta, by = "date") %>%
   full_join(baidu_ximalaya, by = "date") %>%
@@ -175,6 +176,11 @@ for(win_name in names(time_windows)) {
   dev.off()
 
   # 5. S-map确定因果类型
+  if(win_name == "long_term") {
+    cat("  长期分析跳过 S-map。\n")
+    next
+  }
+
   smap_results <- list()
   smap_daily_list <- list()
   for(tp in tp_values) {
@@ -197,26 +203,41 @@ for(win_name in names(time_windows)) {
   }
 
   smap_summary_final <- bind_rows(smap_results)
-  write.xlsx(smap_summary_final, paste0("data_proc/smap_summary_", win_name, "_", Sys.Date(), ".xlsx"))
+  write.csv(smap_summary_final, paste0("data_proc/smap_summary_", win_name, "_", Sys.Date(), ".csv"), row.names = FALSE)
   
   smap_daily_df <- bind_rows(smap_daily_list)
-  time_fig_x_date <- c("2025-9-19", "2025-9-21", "2025-9-22", "2025-9-24", "2025-9-26", "2025-9-28", "2025-9-29", "2025-10-04")
   
-  png(paste0("data_proc/smap_daily_derivatives_", win_name, "_", Sys.Date(), ".png"), width = 2400, height = 1600, res = 300)
-  p_smap <- ggplot(smap_daily_df, aes(x = date, y = derivative)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "red", alpha = 0.6) +
-    geom_line(color = "gray70", alpha = 0.4) +
-    geom_point(aes(color = derivative > 0), size = 1.2) +
-    geom_smooth(method = "loess", span = 0.3, color = "black", linewidth = 0.6, se = FALSE) +
-    facet_wrap(~ tp, scales = "free_y", ncol = 2, labeller = labeller(tp = function(x) paste("Tp =", x))) +
-    scale_color_manual(values = c("TRUE" = "#E74C3C", "FALSE" = "#3498DB"), name = "Effect Direction", labels = c("Inhibition (Negative)", "Promotion (Positive)")) +
-    scale_x_date(breaks = as.Date(time_fig_x_date), labels = gsub("2025-", "", time_fig_x_date)) +
-    coord_cartesian(ylim = c(NA, 0.005)) +
-    labs(title = paste("Daily Interaction Strength:", time_windows[[win_name]]$label), subtitle = "Dynamic effect of Baidu Index on Anta Stock Price Level", x = "Date", y = "Local Derivative (∂Stock / ∂Baidu)") +
-    theme_bw() + theme(legend.position = "bottom", axis.text.x = element_text(angle = 45, hjust = 1), strip.background = element_rect(fill = "gray95"), strip.text = element_text(face = "bold"), panel.grid.minor = element_blank())
-  print(p_smap)
-  dev.off()
+  # 短期 S-map 特定定制
+  if(win_name == "short_term") {
+    # 仅保留 Tp = 1 和 Tp = 2
+    smap_daily_plot_df <- smap_daily_df %>% filter(tp %in% c(1, 2))
+    
+    # 定制日期：开始日期, 9-19, 9-26, 结束日期
+    short_x_dates <- as.Date(c(
+      min(smap_daily_plot_df$date, na.rm = T), 
+      "2025-09-19", 
+      "2025-09-26", 
+      max(smap_daily_plot_df$date, na.rm = T)
+    )) %>% unique() %>% sort()
+    
+    png(paste0("data_proc/smap_daily_derivatives_", win_name, "_", Sys.Date(), ".png"), width = 1000, height = 1200, res = 300)
+    p_smap <- ggplot(smap_daily_plot_df, aes(x = date, y = derivative)) +
+      # 添加背景高亮矩形
+      annotate("rect", xmin = as.Date("2025-09-19"), xmax = as.Date("2025-09-26"), 
+               ymin = -Inf, ymax = Inf, fill = "gray80", alpha = 0.3) +
+      geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6) +
+      geom_line(color = "gray70", alpha = 0.4) +
+      geom_point(size = 1.2) + 
+      facet_wrap(~ tp, scales = "free_y", nrow = 2, labeller = labeller(tp = function(x) paste("Tp =", x))) +
+      scale_x_date(breaks = short_x_dates, labels = format(short_x_dates, "%m-%d")) +
+      coord_cartesian(ylim = c(NA, 0.005)) +
+      labs(title = NULL, subtitle = NULL, x = "Date", y = "Local derivative (∂Stock / ∂Baidu)") + 
+      theme_bw() + 
+      theme(strip.background = element_rect(fill = "gray95"), strip.text = element_text(face = "bold"), panel.grid.minor = element_blank())
+    print(p_smap)
+    dev.off()
+  }
   
-  write.xlsx(smap_daily_df, paste0("data_proc/smap_daily_details_", win_name, "_", Sys.Date(), ".xlsx"))
+  write.csv(smap_daily_df, paste0("data_proc/smap_daily_details_", win_name, "_", Sys.Date(), ".csv"), row.names = FALSE)
 }
 cat("\n分析完成。结果已保存至 data_proc 文件夹。\n")
